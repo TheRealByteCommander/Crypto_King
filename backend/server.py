@@ -154,6 +154,16 @@ async def list_agents():
         }
     }
 
+@api_router.get("/strategies")
+async def list_strategies():
+    """List all available trading strategies."""
+    from strategies import get_available_strategies
+    strategies = get_available_strategies()
+    return {
+        "strategies": strategies,
+        "default": settings.default_strategy
+    }
+
 @api_router.post("/bot/start", response_model=BotResponse)
 async def start_bot(request: BotStartRequest):
     """Start the trading bot."""
