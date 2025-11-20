@@ -14,20 +14,24 @@ class Settings(BaseSettings):
     binance_api_secret: str
     binance_testnet: bool = True
     
+    # Ollama Configuration
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_api_key: str = "ollama"
+    
     # NexusChat Agent LLM Configuration
-    nexuschat_llm_provider: str = "openai"
-    nexuschat_api_key: str
-    nexuschat_model: str = "gpt-4"
+    nexuschat_llm_provider: str = "ollama"
+    nexuschat_model: str = "llama3.2"
+    nexuschat_base_url: str = "http://localhost:11434/v1"
     
     # CypherMind Agent LLM Configuration
-    cyphermind_llm_provider: str = "openai"
-    cyphermind_api_key: str
-    cyphermind_model: str = "gpt-4"
+    cyphermind_llm_provider: str = "ollama"
+    cyphermind_model: str = "llama3.2"
+    cyphermind_base_url: str = "http://localhost:11434/v1"
     
     # CypherTrade Agent LLM Configuration
-    cyphertrade_llm_provider: str = "openai"
-    cyphertrade_api_key: str
-    cyphertrade_model: str = "gpt-4"
+    cyphertrade_llm_provider: str = "ollama"
+    cyphertrade_model: str = "llama3.2"
+    cyphertrade_base_url: str = "http://localhost:11434/v1"
     
     # Trading Configuration
     default_strategy: str = "ma_crossover"
