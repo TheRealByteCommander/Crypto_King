@@ -173,7 +173,7 @@ class TradingBot:
                     order = self.binance_client.execute_order(symbol, "BUY", quantity)
                     
                     # Save trade to database
-                    await self._save_trade(symbol, "BUY", quantity, order)
+                    await self._save_trade(symbol, "BUY", quantity, order, analysis)
                     
                     await self.agent_manager.log_agent_message(
                         "CypherTrade",
