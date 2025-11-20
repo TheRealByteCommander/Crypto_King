@@ -205,20 +205,29 @@ Klick: **"Stop Trading Bot"**
 
 ---
 
-## 📊 Trading Strategie
+## 📊 Trading Strategien
 
-### Moving Average Crossover
+### 5 Verfügbare Strategien
 
-**Parameter:**
-- Fast SMA: 20 Perioden
-- Slow SMA: 50 Perioden
+1. **Moving Average Crossover** - Trend-Folge (SMA 20/50)
+2. **RSI** - Relative Strength Index (Momentum)
+3. **MACD** - Moving Average Convergence Divergence
+4. **Bollinger Bands** - Volatilitäts-basiert
+5. **Combined** - Multi-Indikator (MA + RSI + MACD)
 
-**Signale:**
-- **BUY:** Fast SMA kreuzt Slow SMA von unten nach oben
-- **SELL:** Fast SMA kreuzt Slow SMA von oben nach unten
-- **HOLD:** Keine klaren Signale
+### Strategie-Auswahl
 
-**Analyse-Intervall:** Alle 5 Minuten
+Wählen Sie im Dashboard aus dem Dropdown-Menü:
+
+- **MA Crossover**: Gut für Trends
+- **RSI**: Gut für Seitwärtsmärkte (Oversold/Overbought)
+- **MACD**: Trend + Momentum Kombination
+- **Bollinger Bands**: Volatilitäts-Trading
+- **Combined**: Konsens aus 3 Indikatoren (empfohlen für Anfänger)
+
+**Analyse-Intervall**: Alle 5 Minuten
+
+**Detaillierte Strategie-Dokumentation**: [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md)
 
 **Anpassbar in:** `/app/backend/agent_configs/cyphermind_config.yaml`
 
