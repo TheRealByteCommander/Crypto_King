@@ -99,11 +99,15 @@ const BotControl = ({ botStatus, onStatusChange }) => {
             <div>
               <Label htmlFor="strategy" className="text-slate-300 mb-2 block">Strategy</Label>
               <Select value={strategy} onValueChange={setStrategy}>
-                <SelectTrigger className="bg-slate-800/50 border-indigo-500/30">
+                <SelectTrigger className="bg-slate-800/50 border-indigo-500/30" data-testid="strategy-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ma_crossover">MA Crossover (SMA 20/50)</SelectItem>
+                  {Object.entries(strategies).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
