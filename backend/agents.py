@@ -125,7 +125,38 @@ class AgentManager:
         logger.info("=" * 60)
     
     def create_group_chat(self) -> tuple:
-        """Create a group chat for agent collaboration."""
+        """Create a group chat for free agent collaboration."""
+        
+        # Flexible speaker selection - agents can speak freely
+        def custom_speaker_selection(last_speaker, groupchat):
+            """Allow agents to speak freely based on context."""
+            messages = groupchat.messages
+            
+            if not messages:
+                return self.agents["nexuschat"]
+            
+            last_message = messages[-1] if messages else None
+            
+            # If last speaker was user_proxy or nexuschat, let cyphermind analyze
+            if last_speaker in [self.agents["user_proxy"], self.agents["nexuschat"]]:
+                return self.agents["cyphermind"]
+            
+            # If cyphermind spoke, let cyphertrade execute or nexuschat respond
+            elif last_speaker == self.agents["cyphermind"]:
+                # Check if message contains action keywords
+                if last_message and any(word in last_message.get("content", "").lower() 
+                                       for word in ["execute", "trade", "buy", "sell", "data"]):
+                    return self.agents["cyphertrade"]
+                else:
+                    return self.agents["nexuschat"]
+            
+            # If cyphertrade spoke, let cyphermind analyze results
+            elif last_speaker == self.agents["cyphertrade"]:
+                return self.agents["cyphermind"]
+            
+            # Default: let nexuschat summarize
+            return self.agents["nexuschat"]
+        
         group_chat = autogen.GroupChat(
             agents=[
                 self.agents["user_proxy"],
@@ -134,7 +165,9 @@ class AgentManager:
                 self.agents["cyphertrade"],
             ],
             messages=[],
-            max_round=20,
+            max_round=30,  # More rounds for free communication
+            speaker_selection_method=custom_speaker_selection,
+            allow_repeat_speaker=False,  # Encourage different agents to speak
         )
         
         manager = autogen.GroupChatManager(
