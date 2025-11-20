@@ -1,5 +1,5 @@
 import pandas as pd
-import pandas_ta as ta
+from ta.trend import SMAIndicator
 import logging
 from typing import Dict, Any, Literal
 
@@ -27,8 +27,8 @@ class MovingAverageCrossover(TradingStrategy):
         """Analyze using MA crossover strategy."""
         try:
             # Calculate moving averages
-            df['sma_fast'] = ta.sma(df['close'], length=self.fast_period)
-            df['sma_slow'] = ta.sma(df['close'], length=self.slow_period)
+            df['sma_fast'] = SMAIndicator(close=df['close'], window=self.fast_period).sma_indicator()
+            df['sma_slow'] = SMAIndicator(close=df['close'], window=self.slow_period).sma_indicator()
             
             # Get last few rows
             last_row = df.iloc[-1]
