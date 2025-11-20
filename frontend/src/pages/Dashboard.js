@@ -20,6 +20,7 @@ import TradeHistory from "../components/TradeHistory";
 import AgentLogs from "../components/AgentLogs";
 import StatsCard from "../components/StatsCard";
 import AgentStatus from "../components/AgentStatus";
+import LearningInsights from "../components/LearningInsights";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
