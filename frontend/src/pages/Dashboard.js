@@ -194,10 +194,10 @@ const Dashboard = () => {
 
           {/* Tabs */}
           <div className="cyber-card p-6">
-            <div className="flex space-x-4 border-b border-indigo-500/20 mb-6">
+            <div className="flex space-x-4 border-b border-indigo-500/20 mb-6 overflow-x-auto">
               <button
                 onClick={() => setActiveTab("overview")}
-                className={`pb-4 px-4 font-medium transition-colors ${
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
                   activeTab === "overview"
                     ? "text-indigo-400 border-b-2 border-indigo-400"
                     : "text-slate-400 hover:text-slate-300"
@@ -209,7 +209,7 @@ const Dashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab("trades")}
-                className={`pb-4 px-4 font-medium transition-colors ${
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
                   activeTab === "trades"
                     ? "text-indigo-400 border-b-2 border-indigo-400"
                     : "text-slate-400 hover:text-slate-300"
@@ -221,7 +221,7 @@ const Dashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab("logs")}
-                className={`pb-4 px-4 font-medium transition-colors ${
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
                   activeTab === "logs"
                     ? "text-indigo-400 border-b-2 border-indigo-400"
                     : "text-slate-400 hover:text-slate-300"
@@ -231,11 +231,24 @@ const Dashboard = () => {
                 <MessageSquare className="w-4 h-4 inline mr-2" />
                 Agent Logs
               </button>
+              <button
+                onClick={() => setActiveTab("learning")}
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "learning"
+                    ? "text-indigo-400 border-b-2 border-indigo-400"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+                data-testid="learning-tab"
+              >
+                <Settings className="w-4 h-4 inline mr-2" />
+                AI Learning
+              </button>
             </div>
 
             {activeTab === "overview" && <PerformanceChart />}
             {activeTab === "trades" && <TradeHistory />}
             {activeTab === "logs" && <AgentLogs />}
+            {activeTab === "learning" && <LearningInsights />}
           </div>
         </main>
 
