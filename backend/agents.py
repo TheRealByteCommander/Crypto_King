@@ -4,6 +4,8 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import json
+import yaml
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -13,40 +15,66 @@ class AgentManager:
     def __init__(self, db):
         self.db = db
         self.agents = {}
+        self.agent_configs = {}
         self.current_position = None
         self.capital = settings.default_amount
+        self.load_agent_configs()
         self.initialize_agents()
     
+    def load_agent_configs(self):
+        """Load agent configurations from YAML files."""
+        config_dir = Path(__file__).parent / "agent_configs"
+        
+        config_files = {
+            "nexuschat": "nexuschat_config.yaml",
+            "cyphermind": "cyphermind_config.yaml",
+            "cyphertrade": "cyphertrade_config.yaml"
+        }
+        
+        for agent_key, filename in config_files.items():
+            config_path = config_dir / filename
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    self.agent_configs[agent_key] = yaml.safe_load(f)
+                logger.info(f"Loaded config for {agent_key} from {filename}")
+            except Exception as e:
+                logger.error(f"Error loading config for {agent_key}: {e}")
+                # Fallback to default config
+                self.agent_configs[agent_key] = {
+                    "system_message": f"You are {agent_key} agent.",
+                    "temperature": 0.7,
+                    "max_tokens": 2000,
+                    "timeout": 120
+                }
+    
     def _get_llm_config(self, agent_type: str) -> Dict[str, Any]:
-        """Get LLM configuration for a specific agent."""
+        """Get LLM configuration for a specific agent (Ollama support)."""
+        config = self.agent_configs.get(agent_type, {})
+        
         if agent_type == "nexuschat":
-            return {
-                "config_list": [{
-                    "model": settings.nexuschat_model,
-                    "api_key": settings.nexuschat_api_key,
-                }],
-                "temperature": 0.7,
-                "timeout": 120,
-            }
+            base_url = settings.nexuschat_base_url
+            model = settings.nexuschat_model
+            api_key = settings.ollama_api_key
         elif agent_type == "cyphermind":
-            return {
-                "config_list": [{
-                    "model": settings.cyphermind_model,
-                    "api_key": settings.cyphermind_api_key,
-                }],
-                "temperature": 0.5,
-                "timeout": 120,
-            }
+            base_url = settings.cyphermind_base_url
+            model = settings.cyphermind_model
+            api_key = settings.ollama_api_key
         elif agent_type == "cyphertrade":
-            return {
-                "config_list": [{
-                    "model": settings.cyphertrade_model,
-                    "api_key": settings.cyphertrade_api_key,
-                }],
-                "temperature": 0.3,
-                "timeout": 120,
-            }
-        raise ValueError(f"Unknown agent type: {agent_type}")
+            base_url = settings.cyphertrade_base_url
+            model = settings.cyphertrade_model
+            api_key = settings.ollama_api_key
+        else:
+            raise ValueError(f"Unknown agent type: {agent_type}")
+        
+        return {
+            "config_list": [{
+                "model": model,
+                "api_key": api_key,
+                "base_url": base_url,
+            }],
+            "temperature": config.get("temperature", 0.7),
+            "timeout": config.get("timeout", 120),
+        }
     
     def initialize_agents(self):
         """Initialize all three specialized agents."""
