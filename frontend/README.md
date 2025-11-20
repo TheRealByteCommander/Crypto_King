@@ -59,33 +59,63 @@ Project CypherTrade
 2. Account erstellen und API Keys generieren
 3. Aktivieren Sie "Spot Trading" Berechtigung
 
-### 2. LLM API Keys
+### 2. Ollama LLMs (Lokale AI Modelle)
 
-Sie benötigen API Keys für die AI Agents. Pro Agent kann ein unterschiedlicher Provider verwendet werden:
+Das System verwendet **Ollama** für lokale LLM-Ausführung:
 
-**OpenAI:**
-- Website: https://platform.openai.com/api-keys
-- Modell: gpt-4, gpt-3.5-turbo, etc.
+**Installation:**
+```bash
+# Linux/macOS
+curl -fsSL https://ollama.com/install.sh | sh
 
-**Anthropic Claude:**
-- Website: https://console.anthropic.com/account/keys
-- Modell: claude-3-sonnet, claude-3-opus, etc.
+# Modell herunterladen
+ollama pull llama3.2
+
+# Server starten
+ollama serve
+```
+
+**Windows:** Download von https://ollama.com/download
+
+**Empfohlene Modelle:**
+- `llama3.2` - Standard, gut ausbalanciert
+- `llama3.1` - Größer, besseres Reasoning
+- `mistral` - Schnell, präzise
+- `gemma2` - Effizient
+
+**Siehe auch:** `/app/OLLAMA_SETUP.md` für Details
 
 ## 🔧 Konfiguration
 
-Bearbeiten Sie `/app/backend/.env` und tragen Sie Ihre API Keys ein:
+### Binance API Keys
+
+Bearbeiten Sie `/app/backend/.env`:
 
 ```env
 # Binance API Configuration
 BINANCE_API_KEY="your_binance_api_key_here"
 BINANCE_API_SECRET="your_binance_api_secret_here"
 BINANCE_TESTNET=true
-
-# LLM Configuration für jeden Agent
-NEXUSCHAT_API_KEY="your_openai_api_key_here"
-CYPHERMIND_API_KEY="your_openai_api_key_here"
-CYPHERTRADE_API_KEY="your_openai_api_key_here"
 ```
+
+### Ollama Konfiguration (bereits gesetzt)
+
+```env
+# Ollama ist bereits konfiguriert für:
+OLLAMA_BASE_URL="http://localhost:11434/v1"
+NEXUSCHAT_MODEL="llama3.2"
+CYPHERMIND_MODEL="llama3.2"
+CYPHERTRADE_MODEL="llama3.2"
+```
+
+### Agent-Prompts anpassen (ohne Code-Update!)
+
+Dateien in `/app/backend/agent_configs/`:
+- `nexuschat_config.yaml` - User Interface Agent
+- `cyphermind_config.yaml` - Strategy Agent
+- `cyphertrade_config.yaml` - Trade Execution Agent
+
+Nach Änderungen: `sudo supervisorctl restart backend`
 
 ## 📖 Verwendung
 
