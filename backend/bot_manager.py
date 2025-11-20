@@ -275,8 +275,65 @@ class TradingBot:
             logger.error(f"Error getting status: {e}")
             return {"error": str(e)}
     
+    async def _evaluate_and_learn_from_trade(self, symbol: str, side: str, quantity: float, exit_price: float):
+        """Evaluate completed trade and learn from it."""
+        try:
+            # Find the corresponding BUY trade
+            buy_trade = await self.db.trades.find_one({
+                "symbol": symbol,
+                "side": "BUY"
+            }, sort=[("timestamp", -1)])
+            
+            if not buy_trade:
+                logger.warning("No corresponding BUY trade found for learning")
+                return
+            
+            entry_price = buy_trade.get("entry_price", 0)
+            if entry_price == 0:
+                return
+            
+            # Calculate profit/loss
+            profit_loss = (exit_price - entry_price) * quantity
+            profit_loss_pct = ((exit_price - entry_price) / entry_price) * 100
+            
+            # Determine outcome
+            if profit_loss > 0:
+                outcome = "success"
+            elif profit_loss < -2:  # More than $2 loss
+                outcome = "failure"
+            else:
+                outcome = "neutral"
+            
+            # Prepare trade data for learning
+            trade_data = {
+                "order_id": buy_trade.get("order_id"),
+                "symbol": symbol,
+                "side": side,
+                "strategy": buy_trade.get("strategy", "unknown"),
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "confidence": buy_trade.get("confidence", 0.0),
+                "indicators": buy_trade.get("indicators", {})
+            }
+            
+            # Let CypherMind learn from this trade
+            cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
+            await cyphermind_memory.learn_from_trade(trade_data, outcome, profit_loss)
+            
+            logger.info(f"Learned from trade: {outcome}, P&L: ${profit_loss:.2f} ({profit_loss_pct:.2f}%)")
+            
+            # Log the learning
+            await self.agent_manager.log_agent_message(
+                "CypherMind",
+                f"Learning: {outcome} trade with {buy_trade.get('strategy')} - P&L: ${profit_loss:.2f}",
+                "learning"
+            )
+        
+        except Exception as e:
+            logger.error(f"Error evaluating and learning from trade: {e}")
+    
     async def get_report(self) -> Dict[str, Any]:
-        """Generate performance report."""
+        """Generate performance report with learning insights."""
         try:
             # Get all trades
             trades = await self.db.trades.find({}).to_list(1000)
@@ -291,6 +348,13 @@ class TradingBot:
             
             profit_loss = total_sold - total_bought
             
+            # Get learning insights from CypherMind
+            cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
+            recent_lessons = await cyphermind_memory.get_recent_lessons(limit=5)
+            
+            # Get collective insights
+            collective_insights = await self.agent_manager.memory_manager.get_collective_insights()
+            
             report = {
                 "total_trades": total_trades,
                 "buy_trades": len(buy_trades),
@@ -298,6 +362,8 @@ class TradingBot:
                 "total_bought_usdt": round(total_bought, 2),
                 "total_sold_usdt": round(total_sold, 2),
                 "profit_loss_usdt": round(profit_loss, 2),
+                "recent_lessons": recent_lessons,
+                "agent_insights": collective_insights,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
