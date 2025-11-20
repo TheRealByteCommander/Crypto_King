@@ -15,8 +15,28 @@ const BotControl = ({ botStatus, onStatusChange }) => {
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [amount, setAmount] = useState("100");
   const [loading, setLoading] = useState(false);
+  const [strategies, setStrategies] = useState({
+    "ma_crossover": "Moving Average Crossover (SMA 20/50)",
+    "rsi": "RSI - Relative Strength Index",
+    "macd": "MACD - Moving Average Convergence Divergence",
+    "bollinger_bands": "Bollinger Bands - Volatility Strategy",
+    "combined": "Combined Strategy (MA + RSI + MACD)"
+  });
 
   const isRunning = botStatus?.is_running || false;
+
+  React.useEffect(() => {
+    // Fetch available strategies
+    axios.get(`${API}/strategies`)
+      .then(response => {
+        if (response.data.strategies) {
+          setStrategies(response.data.strategies);
+        }
+      })
+      .catch(error => {
+        console.error("Error fetching strategies:", error);
+      });
+  }, []);
 
   const handleStart = async () => {
     setLoading(true);
