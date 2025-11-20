@@ -115,8 +115,14 @@ class AgentManager:
             max_consecutive_auto_reply=10,
             code_execution_config=False,
         )
+        logger.info("✓ UserProxy initialized")
         
-        logger.info("All agents initialized successfully")
+        logger.info("=" * 60)
+        logger.info("All agents initialized successfully from YAML configs")
+        logger.info(f"NexusChat: {settings.nexuschat_model} @ {settings.nexuschat_base_url}")
+        logger.info(f"CypherMind: {settings.cyphermind_model} @ {settings.cyphermind_base_url}")
+        logger.info(f"CypherTrade: {settings.cyphertrade_model} @ {settings.cyphertrade_base_url}")
+        logger.info("=" * 60)
     
     def create_group_chat(self) -> tuple:
         """Create a group chat for agent collaboration."""
