@@ -139,6 +139,21 @@ class TradingBot:
         try:
             symbol = self.current_config["symbol"]
             signal = analysis["signal"]
+            strategy = self.current_config.get("strategy", "unknown")
+            
+            # Check memory for insights before trading
+            cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
+            pattern_insights = await cyphermind_memory.get_pattern_insights(symbol, strategy)
+            
+            # Log insights for decision making
+            if pattern_insights.get("total_trades", 0) > 0:
+                logger.info(f"Pattern insights for {symbol}/{strategy}: {pattern_insights.get('recommendation')}")
+                await self.agent_manager.log_agent_message(
+                    "CypherMind",
+                    f"Historical performance: {pattern_insights.get('success_rate', 0):.1f}% success rate, "
+                    f"Avg P&L: ${pattern_insights.get('avg_profit_per_trade', 0):.2f}",
+                    "analysis"
+                )
             
             # Get current price
             current_price = self.binance_client.get_current_price(symbol)
