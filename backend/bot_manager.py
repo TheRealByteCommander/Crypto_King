@@ -208,9 +208,11 @@ class TradingBot:
                 "error"
             )
     
-    async def _save_trade(self, symbol: str, side: str, quantity: float, order: Dict[str, Any]):
-        """Save trade to database."""
+    async def _save_trade(self, symbol: str, side: str, quantity: float, order: Dict[str, Any], analysis: Dict[str, Any] = None):
+        """Save trade to database and update agent memory."""
         try:
+            current_price = self.binance_client.get_current_price(symbol)
+            
             trade = {
                 "symbol": symbol,
                 "side": side,
@@ -219,11 +221,23 @@ class TradingBot:
                 "status": order["status"],
                 "executed_qty": order["executedQty"],
                 "quote_qty": order["cummulativeQuoteQty"],
+                "entry_price": current_price,
+                "strategy": self.current_config.get("strategy", "unknown"),
+                "confidence": analysis.get("confidence", 0.0) if analysis else 0.0,
+                "indicators": analysis.get("indicators", {}) if analysis else {},
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
             await self.db.trades.insert_one(trade)
             logger.info(f"Trade saved to database: {trade}")
+            
+            # Store trade in CypherTrade's memory for future reference
+            cyphertrade_memory = self.agent_manager.memory_manager.get_agent_memory("CypherTrade")
+            await cyphertrade_memory.store_memory(
+                memory_type="trade_execution",
+                content=trade,
+                metadata={"side": side, "symbol": symbol}
+            )
         
         except Exception as e:
             logger.error(f"Error saving trade: {e}")
