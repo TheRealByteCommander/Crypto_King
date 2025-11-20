@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import yaml
 from pathlib import Path
+from memory_manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class AgentManager:
         self.agent_configs = {}
         self.current_position = None
         self.capital = settings.default_amount
+        self.memory_manager = MemoryManager(db)
         self.load_agent_configs()
         self.initialize_agents()
     
