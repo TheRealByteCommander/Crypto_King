@@ -68,4 +68,25 @@ strategy_params:
   ma_crossover:
     fast_period: 20
     slow_period: 50
+    confidence_threshold: 0.6
+  
+  rsi:
+    period: 14
+    oversold: 30
+    overbought: 70
     confidence_threshold: 0.7
+  
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+    confidence_threshold: 0.7
+  
+  bollinger_bands:
+    period: 20
+    std_dev: 2
+    confidence_threshold: 0.7
+  
+  combined:
+    min_signals: 2  # Minimum 2 von 3 Indikatoren müssen übereinstimmen
+    confidence_threshold: 0.75
