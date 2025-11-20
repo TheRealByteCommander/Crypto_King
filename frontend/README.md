@@ -1,33 +1,115 @@
-# Getting Started with Create React App
+# Project CypherTrade
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Ein vollständiges, modulares und sicheres Multi-Agent-System für den automatisierten Handel von Kryptowährungen auf der Binance-Börse, entwickelt mit dem Microsoft Autogen Framework.
 
-## Available Scripts
+## 🚀 Features
 
-In the project directory, you can run:
+### Multi-Agent System (Autogen)
+- **NexusChat Agent**: User Interface Agent - Kommunikations-Hub für Benutzerinteraktionen
+- **CypherMind Agent**: Decision & Strategy Agent - Analysiert Marktdaten und trifft Handelsentscheidungen
+- **CypherTrade Agent**: Trade Execution Agent - Führt Trades auf Binance sicher aus
 
-### `npm start`
+### Trading Features
+- ✅ Moving Average Crossover Strategie (SMA 20/50)
+- ✅ Automatische Marktdatenanalyse alle 5 Minuten
+- ✅ Binance API Integration (Testnet & Live)
+- ✅ Risk Management mit konfigurierbaren Parametern
+- ✅ Real-time Performance Tracking
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### Dashboard Features
+- 📊 Live Performance Charts
+- 📈 Trade History mit detaillierten Informationen
+- 🤖 Agent Status Monitoring
+- 📝 Live Agent Communication Logs
+- 💰 Real-time Balance Updates
+- 🔄 WebSocket-basierte Live-Updates
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### Benachrichtigungen
+- ✉️ Email-Benachrichtigungen für Trades
+- 📱 Telegram-Bot Integration
 
-### `npm test`
+## 🏗️ Architektur
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```
+Project CypherTrade
+├── Backend (FastAPI + Python)
+│   ├── 3 Autogen AI Agents
+│   ├── Binance API Client
+│   ├── Trading Strategies
+│   ├── WebSocket Server
+│   └── MongoDB Persistence
+└── Frontend (React)
+    ├── Dashboard
+    ├── Bot Control Panel
+    ├── Performance Charts
+    └── Real-time Updates
+```
 
-### `npm run build`
+## 📋 Voraussetzungen
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### 1. Binance API Keys
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+**Für Testnet (Empfohlen zum Testen):**
+1. Gehen Sie zu: https://testnet.binance.vision/
+2. Registrieren Sie sich und erstellen Sie API Keys
+3. Notieren Sie sich `API_KEY` und `API_SECRET`
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+**Für Live Trading (Vorsicht: Echtes Geld!):**
+1. Gehen Sie zu: https://www.binance.com/
+2. Account erstellen und API Keys generieren
+3. Aktivieren Sie "Spot Trading" Berechtigung
+
+### 2. LLM API Keys
+
+Sie benötigen API Keys für die AI Agents. Pro Agent kann ein unterschiedlicher Provider verwendet werden:
+
+**OpenAI:**
+- Website: https://platform.openai.com/api-keys
+- Modell: gpt-4, gpt-3.5-turbo, etc.
+
+**Anthropic Claude:**
+- Website: https://console.anthropic.com/account/keys
+- Modell: claude-3-sonnet, claude-3-opus, etc.
+
+## 🔧 Konfiguration
+
+Bearbeiten Sie `/app/backend/.env` und tragen Sie Ihre API Keys ein:
+
+```env
+# Binance API Configuration
+BINANCE_API_KEY="your_binance_api_key_here"
+BINANCE_API_SECRET="your_binance_api_secret_here"
+BINANCE_TESTNET=true
+
+# LLM Configuration für jeden Agent
+NEXUSCHAT_API_KEY="your_openai_api_key_here"
+CYPHERMIND_API_KEY="your_openai_api_key_here"
+CYPHERTRADE_API_KEY="your_openai_api_key_here"
+```
+
+## 📖 Verwendung
+
+### Bot starten
+
+1. Öffnen Sie das Dashboard
+2. Wählen Sie Strategie, Symbol und Betrag
+3. Klicken Sie auf "Start Trading Bot"
+4. Überwachen Sie Performance, Trades und Agent Logs
+
+### Sicherheitshinweise
+
+⚠️ **WICHTIG**:
+- Verwenden Sie Binance Testnet zum Testen
+- Starten Sie mit kleinen Beträgen
+- Crypto Trading ist riskant - nur investieren, was Sie verlieren können
+- Die Entwickler übernehmen keine Haftung
+
+## 📊 Trading Strategie
+
+**Moving Average Crossover**: Fast SMA (20) kreuzt Slow SMA (50)
+- **Kaufsignal**: Fast > Slow (von unten)
+- **Verkaufssignal**: Fast < Slow (von oben)
+- **Analyse**: Alle 5 Minuten
 
 ### `npm run eject`
 
