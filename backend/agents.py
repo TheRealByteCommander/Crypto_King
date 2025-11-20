@@ -77,66 +77,35 @@ class AgentManager:
         }
     
     def initialize_agents(self):
-        """Initialize all three specialized agents."""
-        logger.info("Initializing agents...")
+        """Initialize all three specialized agents with configs from YAML files."""
+        logger.info("Initializing agents from configuration files...")
         
         # NexusChat Agent - User Interface
+        nexuschat_config = self.agent_configs.get("nexuschat", {})
         self.agents["nexuschat"] = autogen.AssistantAgent(
-            name="NexusChat",
-            system_message="""
-            Du bist Nexus, der Kommunikations-Hub für Project CypherTrade.
-            
-            Deine Aufgaben:
-            - Kommuniziere klar und präzise mit dem Benutzer
-            - Parse und validiere Benutzerbefehle (start, stop, status, report)
-            - Leite Befehle an CypherMind weiter
-            - Formatiere Status-Updates und Berichte für den Benutzer
-            
-            Sei professionell, präzise und hilfreich.
-            """,
+            name=nexuschat_config.get("agent_name", "NexusChat"),
+            system_message=nexuschat_config.get("system_message", "You are NexusChat agent."),
             llm_config=self._get_llm_config("nexuschat")
         )
+        logger.info(f"✓ {nexuschat_config.get('agent_name')} initialized")
         
         # CypherMind Agent - Decision & Strategy
+        cyphermind_config = self.agent_configs.get("cyphermind", {})
         self.agents["cyphermind"] = autogen.AssistantAgent(
-            name="CypherMind",
-            system_message="""
-            Du bist CypherMind, der strategische Denker von Project CypherTrade.
-            
-            Deine Aufgaben:
-            - Analysiere Marktdaten und technische Indikatoren
-            - Implementiere Handelsstrategien (z.B. Moving Average Crossover)
-            - Treffe rationale, datengestützte Handelsentscheidungen
-            - Generiere präzise Ausführungsbefehle für CypherTrade
-            - Protokolliere jeden Analyseschritt
-            
-            Prinzipien:
-            - Keine emotionalen Entscheidungen
-            - Risikomanagement ist oberste Priorität
-            - Jede Entscheidung muss durch Daten begründet sein
-            """,
+            name=cyphermind_config.get("agent_name", "CypherMind"),
+            system_message=cyphermind_config.get("system_message", "You are CypherMind agent."),
             llm_config=self._get_llm_config("cyphermind")
         )
+        logger.info(f"✓ {cyphermind_config.get('agent_name')} initialized")
         
         # CypherTrade Agent - Trade Execution
+        cyphertrade_config = self.agent_configs.get("cyphertrade", {})
         self.agents["cyphertrade"] = autogen.AssistantAgent(
-            name="CypherTrade",
-            system_message="""
-            Du bist CypherTrade, der Executor für Binance Trading Operations.
-            
-            Deine Aufgaben:
-            - Sichere Ausführung von Handelsbefehlen auf Binance
-            - Abrufen von Marktdaten und Kontoinformationen
-            - Validierung aller Befehle vor der Ausführung
-            - Fehlerbehandlung und detailliertes Reporting
-            
-            Sicherheitsprinzipien:
-            - Führe nur explizite Befehle von CypherMind aus
-            - Validiere alle Parameter vor der Ausführung
-            - Keine eigenständige Trading-Logik
-            """,
+            name=cyphertrade_config.get("agent_name", "CypherTrade"),
+            system_message=cyphertrade_config.get("system_message", "You are CypherTrade agent."),
             llm_config=self._get_llm_config("cyphertrade")
         )
+        logger.info(f"✓ {cyphertrade_config.get('agent_name')} initialized")
         
         # User Proxy for orchestration
         self.agents["user_proxy"] = autogen.UserProxyAgent(
