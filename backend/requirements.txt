@@ -56,6 +56,7 @@ pycodestyle==2.14.0
 pycparser==2.23
 pycryptodome==3.23.0
 pydantic==2.12.4
+pydantic-settings==2.12.0
 pydantic_core==2.41.5
 pyflakes==3.4.0
 Pygments==2.19.2
@@ -69,6 +70,7 @@ python-jose==3.5.0
 python-multipart==0.0.20
 pytokens==0.3.0
 pytz==2025.2
+PyYAML==6.0.3
 regex==2025.11.3
 requests==2.32.5
 requests-oauthlib==2.0.0
