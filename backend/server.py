@@ -257,7 +257,7 @@ async def get_analyses(limit: int = 50):
 
 @api_router.get("/stats")
 async def get_statistics():
-    """Get overall statistics."""
+    """Get overall statistics with learning insights."""
     try:
         total_trades = await db.trades.count_documents({})
         total_analyses = await db.analyses.count_documents({})
@@ -274,6 +274,13 @@ async def get_statistics():
         total_sold = sum(float(t.get("quote_qty", 0)) for t in sell_trades)
         profit_loss = total_sold - total_bought
         
+        # Get memory stats
+        memory_stats = {
+            "nexuschat": await db.memory_nexuschat.count_documents({}),
+            "cyphermind": await db.memory_cyphermind.count_documents({}),
+            "cyphertrade": await db.memory_cyphertrade.count_documents({})
+        }
+        
         return {
             "total_trades": total_trades,
             "total_analyses": total_analyses,
@@ -281,10 +288,61 @@ async def get_statistics():
             "profit_loss_usdt": round(profit_loss, 2),
             "total_bought_usdt": round(total_bought, 2),
             "total_sold_usdt": round(total_sold, 2),
-            "recent_trades": recent_trades
+            "recent_trades": recent_trades,
+            "memory_stats": memory_stats
         }
     except Exception as e:
         logger.error(f"Error getting statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/memory/{agent_name}")
+async def get_agent_memory(agent_name: str, limit: int = 20):
+    """Get memory for a specific agent."""
+    try:
+        memory = agent_manager.memory_manager.get_agent_memory(agent_name)
+        memories = await memory.retrieve_memories(limit=limit)
+        return {
+            "agent": agent_name,
+            "memories": memories,
+            "count": len(memories)
+        }
+    except Exception as e:
+        logger.error(f"Error getting agent memory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/memory/{agent_name}/lessons")
+async def get_agent_lessons(agent_name: str, limit: int = 10):
+    """Get recent lessons learned by an agent."""
+    try:
+        memory = agent_manager.memory_manager.get_agent_memory(agent_name)
+        lessons = await memory.get_recent_lessons(limit=limit)
+        return {
+            "agent": agent_name,
+            "lessons": lessons
+        }
+    except Exception as e:
+        logger.error(f"Error getting agent lessons: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/memory/insights/collective")
+async def get_collective_insights():
+    """Get collective insights from all agents."""
+    try:
+        insights = await agent_manager.memory_manager.get_collective_insights()
+        return insights
+    except Exception as e:
+        logger.error(f"Error getting collective insights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/memory/pattern/{symbol}/{strategy}")
+async def get_pattern_insights(symbol: str, strategy: str):
+    """Get pattern insights for specific symbol and strategy."""
+    try:
+        memory = agent_manager.memory_manager.get_agent_memory("CypherMind")
+        insights = await memory.get_pattern_insights(symbol, strategy)
+        return insights
+    except Exception as e:
+        logger.error(f"Error getting pattern insights: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # WebSocket endpoint for real-time updates
