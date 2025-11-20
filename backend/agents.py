@@ -78,33 +78,46 @@ class AgentManager:
             "timeout": config.get("timeout", 120),
         }
     
+    async def _enrich_system_message_with_memory(self, agent_name: str, base_message: str) -> str:
+        """Enrich agent system message with memory/learning data."""
+        try:
+            memory_summary = await self.memory_manager.generate_memory_summary(agent_name)
+            return base_message + "\n\n" + memory_summary
+        except Exception as e:
+            logger.warning(f"Could not load memory for {agent_name}: {e}")
+            return base_message
+    
     def initialize_agents(self):
         """Initialize all three specialized agents with configs from YAML files."""
         logger.info("Initializing agents from configuration files...")
         
         # NexusChat Agent - User Interface
         nexuschat_config = self.agent_configs.get("nexuschat", {})
+        base_message = nexuschat_config.get("system_message", "You are NexusChat agent.")
+        # Note: Memory enrichment happens async, so we use base message initially
         self.agents["nexuschat"] = autogen.AssistantAgent(
             name=nexuschat_config.get("agent_name", "NexusChat"),
-            system_message=nexuschat_config.get("system_message", "You are NexusChat agent."),
+            system_message=base_message,
             llm_config=self._get_llm_config("nexuschat")
         )
         logger.info(f"✓ {nexuschat_config.get('agent_name')} initialized")
         
         # CypherMind Agent - Decision & Strategy
         cyphermind_config = self.agent_configs.get("cyphermind", {})
+        base_message = cyphermind_config.get("system_message", "You are CypherMind agent.")
         self.agents["cyphermind"] = autogen.AssistantAgent(
             name=cyphermind_config.get("agent_name", "CypherMind"),
-            system_message=cyphermind_config.get("system_message", "You are CypherMind agent."),
+            system_message=base_message,
             llm_config=self._get_llm_config("cyphermind")
         )
         logger.info(f"✓ {cyphermind_config.get('agent_name')} initialized")
         
         # CypherTrade Agent - Trade Execution
         cyphertrade_config = self.agent_configs.get("cyphertrade", {})
+        base_message = cyphertrade_config.get("system_message", "You are CypherTrade agent.")
         self.agents["cyphertrade"] = autogen.AssistantAgent(
             name=cyphertrade_config.get("agent_name", "CypherTrade"),
-            system_message=cyphertrade_config.get("system_message", "You are CypherTrade agent."),
+            system_message=base_message,
             llm_config=self._get_llm_config("cyphertrade")
         )
         logger.info(f"✓ {cyphertrade_config.get('agent_name')} initialized")
