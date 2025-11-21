@@ -22,7 +22,7 @@ import StatsCard from "../components/StatsCard";
 import AgentStatus from "../components/AgentStatus";
 import LearningInsights from "../components/LearningInsights";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
 
 const Dashboard = () => {
@@ -49,6 +49,10 @@ const Dashboard = () => {
   }, []);
 
   const connectWebSocket = () => {
+    if (!BACKEND_URL) {
+      console.error("BACKEND_URL is not defined");
+      return;
+    }
     const wsUrl = `${BACKEND_URL.replace('https:', 'wss:').replace('http:', 'ws:')}/api/ws`;
     const websocket = new WebSocket(wsUrl);
 

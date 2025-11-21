@@ -16,14 +16,30 @@ import asyncio
 from config import settings
 from agents import AgentManager
 from bot_manager import get_bot_instance
+from constants import BOT_BROADCAST_INTERVAL_SECONDS
+from validators import validate_all_services, validate_mongodb_connection
+from mcp_server import create_mcp_server
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Configure logging first
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# MongoDB connection - use settings for consistency
+try:
+    mongo_url = settings.mongo_url
+    db_name = settings.db_name
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[db_name]
+    logger.info(f"MongoDB connected to {db_name}")
+except Exception as e:
+    logger.error(f"Failed to connect to MongoDB: {e}")
+    raise
 
 # Create the main app without a prefix
 app = FastAPI(
@@ -35,16 +51,15 @@ app = FastAPI(
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
 # Initialize agents and bot
 agent_manager = AgentManager(db)
 bot = get_bot_instance(db, agent_manager)
+
+# Initialize MCP Server if enabled
+mcp_server = create_mcp_server(db, agent_manager, bot)
+if mcp_server:
+    app.include_router(mcp_server.router)
+    logger.info("MCP Server routes registered")
 
 # WebSocket connections manager
 class ConnectionManager:
@@ -116,16 +131,25 @@ async def root():
 
 @api_router.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Health check endpoint with service validation."""
+    # Validate all services
+    service_validation = await validate_all_services()
+    
+    # Determine overall health status
+    all_services_valid = all(
+        service["valid"] for service in service_validation.values()
+    )
+    
     return {
-        "status": "healthy",
+        "status": "healthy" if all_services_valid else "degraded",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "bot_running": bot.is_running,
         "agents": {
             "nexuschat": settings.nexuschat_llm_provider,
             "cyphermind": settings.cyphermind_llm_provider,
             "cyphertrade": settings.cyphertrade_llm_provider
-        }
+        },
+        "services": service_validation
     }
 
 @api_router.get("/agents")
@@ -226,7 +250,7 @@ async def get_bot_report():
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/trades", response_model=List[Trade])
-async def get_trades(limit: int = 100):
+async def get_trades(limit: int = 100):  # Using default from constants would require refactoring
     """Get trade history."""
     try:
         trades = await db.trades.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
@@ -372,14 +396,21 @@ async def broadcast_updates():
                     "type": "status_update",
                     "data": status
                 })
-            await asyncio.sleep(10)  # Broadcast every 10 seconds
+            await asyncio.sleep(BOT_BROADCAST_INTERVAL_SECONDS)
         except Exception as e:
             logger.error(f"Error broadcasting updates: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(BOT_BROADCAST_INTERVAL_SECONDS)
 
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks on application startup."""
+    # Validate MongoDB connection on startup
+    mongodb_valid, mongodb_error = await validate_mongodb_connection()
+    if not mongodb_valid:
+        logger.warning(f"MongoDB validation failed on startup: {mongodb_error}")
+    else:
+        logger.info("MongoDB connection validated on startup")
+    
     asyncio.create_task(broadcast_updates())
     logger.info("Project CypherTrade started successfully")
 
@@ -389,7 +420,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=settings.cors_origins.split(',') if settings.cors_origins != "*" else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

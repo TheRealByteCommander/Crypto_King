@@ -5,6 +5,12 @@ from datetime import datetime, timezone
 from binance_client import BinanceClientWrapper
 from strategies import get_strategy
 from config import settings
+from constants import (
+    BOT_LOOP_INTERVAL_SECONDS,
+    BOT_ERROR_RETRY_DELAY_SECONDS,
+    MIN_PROFIT_LOSS_THRESHOLD,
+    QUANTITY_DECIMAL_PLACES
+)
 import json
 
 logger = logging.getLogger(__name__)
@@ -124,15 +130,15 @@ class TradingBot:
                 if analysis["signal"] in ["BUY", "SELL"]:
                     await self._execute_trade(analysis)
                 
-                # Wait for next iteration (5 minutes)
-                await asyncio.sleep(300)
+                # Wait for next iteration
+                await asyncio.sleep(BOT_LOOP_INTERVAL_SECONDS)
             
             except asyncio.CancelledError:
                 logger.info("Bot loop cancelled")
                 break
             except Exception as e:
                 logger.error(f"Error in bot loop: {e}")
-                await asyncio.sleep(60)  # Wait 1 minute before retrying
+                await asyncio.sleep(BOT_ERROR_RETRY_DELAY_SECONDS)
     
     async def _execute_trade(self, analysis: Dict[str, Any]):
         """Execute a trade based on analysis."""
@@ -166,7 +172,7 @@ class TradingBot:
                 quantity = amount_to_use / current_price
                 
                 # Round to appropriate decimals
-                quantity = round(quantity, 6)
+                quantity = round(quantity, QUANTITY_DECIMAL_PLACES)
                 
                 if quantity > 0:
                     logger.info(f"Executing BUY: {quantity} {symbol}")
@@ -187,7 +193,7 @@ class TradingBot:
                 balance = self.binance_client.get_account_balance(base_asset)
                 
                 if balance > 0:
-                    quantity = round(balance, 6)
+                    quantity = round(balance, QUANTITY_DECIMAL_PLACES)
                     logger.info(f"Executing SELL: {quantity} {symbol}")
                     order = self.binance_client.execute_order(symbol, "SELL", quantity)
                     
@@ -299,7 +305,7 @@ class TradingBot:
             # Determine outcome
             if profit_loss > 0:
                 outcome = "success"
-            elif profit_loss < -2:  # More than $2 loss
+            elif profit_loss < -MIN_PROFIT_LOSS_THRESHOLD:
                 outcome = "failure"
             else:
                 outcome = "neutral"

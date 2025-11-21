@@ -7,6 +7,12 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone, timedelta
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from constants import (
+    MAX_SHORT_TERM_MEMORY,
+    DEFAULT_MEMORY_RETRIEVAL_LIMIT,
+    DEFAULT_MEMORY_DAYS_BACK,
+    DEFAULT_MEMORY_CLEANUP_DAYS
+)
 import json
 
 logger = logging.getLogger(__name__)
@@ -19,7 +25,7 @@ class AgentMemory:
         self.agent_name = agent_name
         self.collection = db[f"memory_{agent_name.lower()}"]
         self.short_term_memory = []  # In-memory for current session
-        self.max_short_term = 50
+        self.max_short_term = MAX_SHORT_TERM_MEMORY
     
     async def store_memory(self, memory_type: str, content: Dict[str, Any], metadata: Dict[str, Any] = None):
         """Store a memory entry."""
@@ -48,8 +54,9 @@ class AgentMemory:
             logger.error(f"Error storing memory for {self.agent_name}: {e}")
             return None
     
-    async def retrieve_memories(self, memory_type: Optional[str] = None, limit: int = 20, 
-                                days_back: int = 30) -> List[Dict[str, Any]]:
+    async def retrieve_memories(self, memory_type: Optional[str] = None, 
+                                limit: int = DEFAULT_MEMORY_RETRIEVAL_LIMIT, 
+                                days_back: int = DEFAULT_MEMORY_DAYS_BACK) -> List[Dict[str, Any]]:
         """Retrieve past memories."""
         try:
             query = {"agent": self.agent_name}
@@ -199,7 +206,7 @@ class AgentMemory:
             logger.error(f"Error getting recent lessons: {e}")
             return []
     
-    async def clear_old_memories(self, days_to_keep: int = 90):
+    async def clear_old_memories(self, days_to_keep: int = DEFAULT_MEMORY_CLEANUP_DAYS):
         """Clear memories older than specified days."""
         try:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)

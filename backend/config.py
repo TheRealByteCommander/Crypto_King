@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     db_name: str
     cors_origins: str = "*"
     
+    # MCP Server Configuration
+    mcp_enabled: bool = False
+    mcp_port: int = 8002
+    
     # Binance Configuration
     binance_api_key: str
     binance_api_secret: str
