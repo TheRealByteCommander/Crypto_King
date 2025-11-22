@@ -582,7 +582,7 @@ MAX_POSITION_SIZE=1000
 RISK_PER_TRADE=0.02
 
 # CORS Configuration
-CORS_ORIGINS=*
+CORS_ORIGINS=http://$CRYPTOKING_IP:3000,http://localhost:3000,http://127.0.0.1:3000
 
 # MCP Server Configuration
 MCP_ENABLED=false

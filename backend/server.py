@@ -48,6 +48,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Add CORS middleware EARLY (before routes are added)
+# Handle CORS origins: support both "*" and comma-separated list
+cors_origins = ["*"]
+if settings.cors_origins and settings.cors_origins.strip() and settings.cors_origins != "*":
+    # Split by comma and strip whitespace
+    cors_origins = [origin.strip() for origin in settings.cors_origins.split(',') if origin.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -416,14 +431,6 @@ async def startup_event():
 
 # Include the router in the main app
 app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=settings.cors_origins.split(',') if settings.cors_origins != "*" else ["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
