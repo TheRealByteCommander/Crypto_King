@@ -8,10 +8,8 @@ CRYPTOKING_IP="192.168.178.154"
 echo "=== Backend CORS & 500-Fehler Fix ==="
 echo ""
 
-# 1. Repository aktualisieren
-echo "[INFO] Aktualisiere Repository..."
-cd "$INSTALL_DIR" || exit 1
-git pull 2>&1 | grep -v "Already up to date" || true"
+# 1. Repository aktualisieren (bereits durch git pull erledigt)
+echo "[INFO] Repository bereits aktualisiert"
 echo ""
 
 # 2. Prüfe Backend .env
@@ -43,7 +41,11 @@ echo ""
 
 # 4. Zeige CORS_ORIGINS
 echo "[INFO] Aktuelle CORS_ORIGINS Konfiguration:"
-grep "^CORS_ORIGINS" "${BACKEND_DIR}/.env" || echo "  (nicht gefunden)"
+if grep -q "^CORS_ORIGINS" "${BACKEND_DIR}/.env" 2>/dev/null; then
+    grep "^CORS_ORIGINS" "${BACKEND_DIR}/.env"
+else
+    echo "  (nicht gefunden)"
+fi
 echo ""
 
 # 5. Prüfe Backend Code für CORS-Middleware Position
