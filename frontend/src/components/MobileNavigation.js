@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, Activity, MessageSquare, Settings } from 'lucide-react';
+import { BarChart3, Activity, MessageSquare, Settings, Bot } from 'lucide-react';
 
 const MobileNavigation = ({ activeTab, setActiveTab }) => {
   return (
@@ -29,6 +29,19 @@ const MobileNavigation = ({ activeTab, setActiveTab }) => {
         >
           <Activity className="w-6 h-6 mb-1" />
           <span className="text-xs font-medium">Trades</span>
+        </button>
+        
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
+            activeTab === 'chat'
+              ? 'text-indigo-400'
+              : 'text-slate-400'
+          }`}
+          aria-label="NexusChat"
+        >
+          <Bot className="w-6 h-6 mb-1" />
+          <span className="text-xs font-medium">Chat</span>
         </button>
         
         <button

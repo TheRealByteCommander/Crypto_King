@@ -22,6 +22,7 @@ import StatsCard from "../components/StatsCard";
 import AgentStatus from "../components/AgentStatus";
 import LearningInsights from "../components/LearningInsights";
 import MobileNavigation from "../components/MobileNavigation";
+import NexusChat from "../components/NexusChat";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -72,7 +73,7 @@ const Dashboard = () => {
         toast.success("Bot started successfully!");
         fetchAllData();
       } else if (data.type === "bot_stopped") {
-        toast.info("Bot stopped");
+        toast.success("Bot stopped");
         fetchAllData();
       }
     };
@@ -247,6 +248,18 @@ const Dashboard = () => {
                 Agent Logs
               </button>
               <button
+                onClick={() => setActiveTab("chat")}
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
+                  activeTab === "chat"
+                    ? "text-indigo-400 border-b-2 border-indigo-400"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+                data-testid="chat-tab"
+              >
+                <MessageSquare className="w-4 h-4 inline mr-2" />
+                NexusChat
+              </button>
+              <button
                 onClick={() => setActiveTab("learning")}
                 className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
                   activeTab === "learning"
@@ -263,6 +276,11 @@ const Dashboard = () => {
             {activeTab === "overview" && <PerformanceChart />}
             {activeTab === "trades" && <TradeHistory />}
             {activeTab === "logs" && <AgentLogs />}
+            {activeTab === "chat" && (
+              <div className="h-[600px]">
+                <NexusChat />
+              </div>
+            )}
             {activeTab === "learning" && <LearningInsights />}
           </div>
         </main>

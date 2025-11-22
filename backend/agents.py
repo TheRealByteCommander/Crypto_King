@@ -210,3 +210,67 @@ class AgentManager:
         if agent_name not in self.agents:
             raise ValueError(f"Agent {agent_name} not found")
         return self.agents[agent_name]
+    
+    async def chat_with_nexuschat(self, user_message: str) -> Dict[str, Any]:
+        """Chat directly with NexusChat agent."""
+        try:
+            nexuschat = self.agents["nexuschat"]
+            user_proxy = self.agents["user_proxy"]
+            
+            # Create a simple chat between user_proxy and nexuschat
+            # Use initiate_chat for direct communication (synchronous method)
+            # Run in executor to avoid blocking
+            import asyncio
+            loop = asyncio.get_event_loop()
+            
+            # Execute synchronous initiate_chat in thread pool
+            response = await loop.run_in_executor(
+                None,
+                lambda: user_proxy.initiate_chat(
+                    recipient=nexuschat,
+                    message=user_message,
+                    max_turns=1,  # Single turn for direct chat
+                    clear_history=False,  # Keep context
+                    silent=False  # Allow logging
+                )
+            )
+            
+            # Extract the response from NexusChat
+            # initiate_chat returns a ChatResult object
+            # Get the last message from the chat history
+            nexuschat_response = "No response received"
+            sender = "NexusChat"
+            
+            if hasattr(response, 'chat_history') and response.chat_history:
+                # Find the last message from NexusChat
+                for msg in reversed(response.chat_history):
+                    if hasattr(msg, 'name') and msg.name == nexuschat.name:
+                        nexuschat_response = msg.content if hasattr(msg, 'content') else str(msg)
+                        sender = msg.name if hasattr(msg, 'name') else "NexusChat"
+                        break
+                    elif isinstance(msg, dict) and msg.get("name") == nexuschat.name:
+                        nexuschat_response = msg.get("content", str(msg))
+                        sender = msg.get("name", "NexusChat")
+                        break
+            elif hasattr(response, 'summary') and response.summary:
+                nexuschat_response = response.summary
+            
+            # Log the conversation
+            await self.log_agent_message("NexusChat", f"User: {user_message}", "info")
+            await self.log_agent_message("NexusChat", f"NexusChat: {nexuschat_response}", "info")
+            
+            return {
+                "success": True,
+                "response": nexuschat_response,
+                "agent": sender,
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error chatting with NexusChat: {e}", exc_info=True)
+            await self.log_agent_message("NexusChat", f"Error: {str(e)}", "error")
+            return {
+                "success": False,
+                "response": f"Error: {str(e)}",
+                "agent": "NexusChat",
+                "timestamp": datetime.now().isoformat()
+            }

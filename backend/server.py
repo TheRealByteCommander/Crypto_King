@@ -124,6 +124,15 @@ def convert_objectid_to_str(obj):
         return obj
 
 # Pydantic Models
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000, description="User message to NexusChat")
+
+class ChatResponse(BaseModel):
+    success: bool
+    response: str
+    agent: str
+    timestamp: str
+
 class BotStartRequest(BaseModel):
     strategy: str = "ma_crossover"
     symbol: str = "BTCUSDT"
@@ -226,6 +235,36 @@ async def list_strategies():
         "strategies": strategies,
         "default": settings.default_strategy
     }
+
+@api_router.post("/chat", response_model=ChatResponse)
+async def chat_with_nexuschat(request: ChatRequest):
+    """Chat with NexusChat agent."""
+    try:
+        result = await agent_manager.chat_with_nexuschat(request.message)
+        
+        # Convert ObjectId to strings before returning
+        clean_result = convert_objectid_to_str(result)
+        
+        # Broadcast chat message via WebSocket
+        await manager.broadcast({
+            "type": "chat_message",
+            "data": {
+                "user": request.message,
+                "agent": "NexusChat",
+                "response": clean_result.get("response", ""),
+                "timestamp": clean_result.get("timestamp")
+            }
+        })
+        
+        return ChatResponse(**clean_result)
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {e}", exc_info=True)
+        return ChatResponse(
+            success=False,
+            response=f"Error: {str(e)}",
+            agent="NexusChat",
+            timestamp=datetime.now(timezone.utc).isoformat()
+        )
 
 @api_router.post("/bot/start", response_model=BotResponse)
 async def start_bot(request: BotStartRequest):
