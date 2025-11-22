@@ -34,7 +34,53 @@ const webpackConfig = {
     alias: {
       '@': path.resolve(__dirname, 'src'),
     },
-    configure: (webpackConfig) => {
+    configure: (webpackConfig, { env, paths }) => {
+      // Add PWA support with Workbox
+      if (env === 'production') {
+        const WorkboxWebpackPlugin = require('workbox-webpack-plugin');
+        webpackConfig.plugins.push(
+          new WorkboxWebpackPlugin.GenerateSW({
+            clientsClaim: true,
+            skipWaiting: true,
+            exclude: [/\.map$/, /asset-manifest\.json$/],
+            runtimeCaching: [
+              {
+                urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
+                handler: 'StaleWhileRevalidate',
+                options: {
+                  cacheName: 'google-fonts',
+                },
+              },
+              {
+                urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'images',
+                  expiration: {
+                    maxEntries: 100,
+                    maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+                  },
+                },
+              },
+              {
+                urlPattern: /\/api\//,
+                handler: 'NetworkFirst',
+                options: {
+                  cacheName: 'api-cache',
+                  networkTimeoutSeconds: 10,
+                  expiration: {
+                    maxEntries: 50,
+                    maxAgeSeconds: 5 * 60, // 5 minutes
+                  },
+                  cacheableResponse: {
+                    statuses: [0, 200],
+                  },
+                },
+              },
+            ],
+          })
+        );
+      }
 
       // Disable hot reload completely if environment variable is set
       if (config.disableHotReload) {

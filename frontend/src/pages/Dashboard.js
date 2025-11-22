@@ -21,6 +21,7 @@ import AgentLogs from "../components/AgentLogs";
 import StatsCard from "../components/StatsCard";
 import AgentStatus from "../components/AgentStatus";
 import LearningInsights from "../components/LearningInsights";
+import MobileNavigation from "../components/MobileNavigation";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -117,40 +118,50 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen relative">
-      <Toaster position="top-right" />
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          className: 'mobile-toast',
+          duration: 3000,
+        }}
+        containerStyle={{
+          top: window.innerWidth < 640 ? 80 : 20,
+        }}
+      />
       <div className="cyber-grid"></div>
       
       <div className="relative z-10">
         {/* Header */}
-        <header className="bg-slate-900/50 backdrop-blur-xl border-b border-indigo-500/20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <header className="bg-slate-900/50 backdrop-blur-xl border-b border-indigo-500/20 sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <Bot className="w-7 h-7 text-white" />
+              <div className="flex items-center space-x-2 md:space-x-4 flex-1 min-w-0">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-5 h-5 md:w-7 md:h-7 text-white" />
                 </div>
-                <div>
-                  <h1 className="text-3xl font-bold glow-cyan">Project CypherTrade</h1>
-                  <p className="text-sm text-slate-400 mt-1">AI-Powered Crypto Trading System</p>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-lg md:text-3xl font-bold glow-cyan truncate">Project CypherTrade</h1>
+                  <p className="text-xs md:text-sm text-slate-400 mt-0.5 hidden sm:block">AI-Powered Crypto Trading System</p>
                 </div>
               </div>
               
               <button
                 onClick={handleRefresh}
-                className="cyber-button flex items-center space-x-2"
+                className="cyber-button flex items-center space-x-1 md:space-x-2 px-3 md:px-4 py-2 touch-manipulation"
                 data-testid="refresh-button"
+                aria-label="Refresh"
               >
-                <RefreshCw className="w-4 h-4" />
-                <span>Refresh</span>
+                <RefreshCw className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="hidden md:inline">Refresh</span>
               </button>
             </div>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8 pb-20 md:pb-8">
           {/* Stats Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-8">
             <StatsCard
               title="Profit/Loss"
               value={stats ? `$${stats.profit_loss_usdt}` : "$0.00"}
@@ -183,25 +194,25 @@ const Dashboard = () => {
 
           {/* Agent Status */}
           {agents && (
-            <div className="mb-8">
+            <div className="mb-4 md:mb-8">
               <AgentStatus agents={agents} />
             </div>
           )}
 
           {/* Bot Control */}
-          <div className="mb-8">
+          <div className="mb-4 md:mb-8">
             <BotControl 
               botStatus={botStatus} 
               onStatusChange={fetchAllData}
             />
           </div>
 
-          {/* Tabs */}
-          <div className="cyber-card p-6">
-            <div className="flex space-x-4 border-b border-indigo-500/20 mb-6 overflow-x-auto">
+          {/* Tabs - Desktop only */}
+          <div className="cyber-card p-4 md:p-6">
+            <div className="hidden md:flex space-x-4 border-b border-indigo-500/20 mb-6 overflow-x-auto">
               <button
                 onClick={() => setActiveTab("overview")}
-                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
                   activeTab === "overview"
                     ? "text-indigo-400 border-b-2 border-indigo-400"
                     : "text-slate-400 hover:text-slate-300"
@@ -213,7 +224,7 @@ const Dashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab("trades")}
-                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
                   activeTab === "trades"
                     ? "text-indigo-400 border-b-2 border-indigo-400"
                     : "text-slate-400 hover:text-slate-300"
@@ -225,7 +236,7 @@ const Dashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab("logs")}
-                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
                   activeTab === "logs"
                     ? "text-indigo-400 border-b-2 border-indigo-400"
                     : "text-slate-400 hover:text-slate-300"
@@ -237,7 +248,7 @@ const Dashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab("learning")}
-                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap ${
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
                   activeTab === "learning"
                     ? "text-indigo-400 border-b-2 border-indigo-400"
                     : "text-slate-400 hover:text-slate-300"
@@ -256,8 +267,11 @@ const Dashboard = () => {
           </div>
         </main>
 
+        {/* Mobile Navigation */}
+        <MobileNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+
         {/* Footer */}
-        <footer className="mt-16 py-8 border-t border-indigo-500/20">
+        <footer className="hidden md:block mt-16 py-8 border-t border-indigo-500/20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center text-slate-400 text-sm">
               <p>Project CypherTrade - Powered by Autogen AI Agents</p>

@@ -100,6 +100,31 @@ body {
 
 .cyber-card:hover {
   border-color: rgba(99, 102, 241, 0.5);
+}
+
+/* Mobile First Optimizations */
+@media (max-width: 640px) {
+  .cyber-card {
+    border-radius: 8px;
+    padding: 1rem;
+  }
+}
+
+/* Touch-friendly buttons */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(99, 102, 241, 0.2);
+}
+
+/* Safe area for mobile devices with notches */
+@supports (padding: max(0px)) {
+  .mobile-safe-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  
+  .mobile-safe-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
   box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);
   transform: translateY(-2px);
 }
