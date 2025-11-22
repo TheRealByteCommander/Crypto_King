@@ -453,6 +453,67 @@ async def startup_event():
 # Include the router in the main app
 app.include_router(api_router)
 
+# Global exception handlers (MUST be after router inclusion)
+# These ensure CORS headers are sent even on errors
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """HTTP exception handler with CORS headers."""
+    origin = request.headers.get("origin", "*")
+    if origin == "null":
+        origin = "*"
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": True, "message": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Validation exception handler with CORS headers."""
+    origin = request.headers.get("origin", "*")
+    if origin == "null":
+        origin = "*"
+    
+    return JSONResponse(
+        status_code=422,
+        content={"error": True, "message": "Validation error", "details": exc.errors()},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler that ensures CORS headers are always sent."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    origin = request.headers.get("origin", "*")
+    if origin == "null":
+        origin = "*"
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": True,
+            "message": str(exc),
+            "type": type(exc).__name__
+        },
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
