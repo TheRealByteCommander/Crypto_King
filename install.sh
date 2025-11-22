@@ -302,19 +302,44 @@ install_nodejs() {
             log_success "Node.js bereits installiert (Version: $NODE_VERSION)"
         else
             log_warning "Node.js Version zu alt ($NODE_VERSION), aktualisiere auf Node.js 20 LTS..."
-            # Alte Node.js Version entfernen falls vorhanden
-            apt-get remove -y nodejs npm 2>/dev/null || true
+            # Alte Node.js Versionen und Konflikte entfernen
+            log_info "Entferne alte Node.js Pakete..."
+            apt-get remove -y nodejs npm libnode-dev libnode72 2>/dev/null || true
+            apt-get purge -y nodejs npm libnode-dev libnode72 2>/dev/null || true
+            dpkg --remove --force-remove-reinstreq libnode-dev libnode72 2>/dev/null || true
             rm -rf /etc/apt/sources.list.d/nodesource.list 2>/dev/null || true
             
+            # Paket-Cache bereinigen
+            apt-get update -qq 2>/dev/null || true
+            dpkg --configure -a 2>/dev/null || true
+            
+            # Abhängigkeiten bereinigen
+            apt-get autoremove -y -qq 2>/dev/null || true
+            apt-get autoclean -qq 2>/dev/null || true
+            
             # Node.js 20 LTS installieren
+            log_info "Installiere Node.js 20 LTS..."
             curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>&1 | grep -v "DEPRECATION" || true
+            apt-get update -qq 2>/dev/null || true
             apt-get install -y -qq nodejs
             log_success "Node.js 20 LTS installiert"
         fi
     else
         log_info "Installiere Node.js 20 LTS..."
+        # Alte Node.js Pakete entfernen falls vorhanden
+        log_info "Entferne alte Node.js Pakete..."
+        apt-get remove -y nodejs npm libnode-dev libnode72 2>/dev/null || true
+        apt-get purge -y nodejs npm libnode-dev libnode72 2>/dev/null || true
+        dpkg --remove --force-remove-reinstreq libnode-dev libnode72 2>/dev/null || true
+        rm -rf /etc/apt/sources.list.d/nodesource.list 2>/dev/null || true
+        
+        # Paket-Cache bereinigen
+        apt-get update -qq 2>/dev/null || true
+        dpkg --configure -a 2>/dev/null || true
+        
         # Node.js 20 LTS installieren
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>&1 | grep -v "DEPRECATION" || true
+        apt-get update -qq 2>/dev/null || true
         apt-get install -y -qq nodejs
         log_success "Node.js 20 LTS installiert"
     fi
