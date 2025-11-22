@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
 import os
 import logging
 from pathlib import Path
@@ -100,11 +101,27 @@ class ConnectionManager:
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
             try:
-                await connection.send_json(message)
+                # Convert ObjectId to strings before sending
+                clean_message = convert_objectid_to_str(message)
+                await connection.send_json(clean_message)
             except Exception as e:
                 logger.error(f"Error broadcasting message: {e}")
 
 manager = ConnectionManager()
+
+# Helper function to convert MongoDB ObjectId to string recursively
+def convert_objectid_to_str(obj):
+    """Recursively convert MongoDB ObjectId objects to strings."""
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_objectid_to_str(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectid_to_str(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_objectid_to_str(item) for item in obj)
+    else:
+        return obj
 
 # Pydantic Models
 class BotStartRequest(BaseModel):
@@ -216,16 +233,19 @@ async def start_bot(request: BotStartRequest):
     try:
         result = await bot.start(request.strategy, request.symbol, request.amount)
         
+        # Convert ObjectId to strings before broadcasting and returning
+        clean_result = convert_objectid_to_str(result)
+        
         # Broadcast status update
         await manager.broadcast({
             "type": "bot_started",
-            "data": result
+            "data": clean_result
         })
         
         return BotResponse(
             success=result["success"],
             message=result["message"],
-            data=result.get("config")
+            data=clean_result.get("config")
         )
     except Exception as e:
         logger.error(f"Error starting bot: {e}", exc_info=True)
@@ -262,7 +282,8 @@ async def get_bot_status():
     """Get current bot status."""
     try:
         status = await bot.get_status()
-        return status
+        # Convert ObjectId to strings before returning
+        return convert_objectid_to_str(status)
     except Exception as e:
         logger.error(f"Error getting bot status: {e}")
         # Return error response instead of raising HTTPException

@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
+from bson import ObjectId
 from binance_client import BinanceClientWrapper
 from strategies import get_strategy
 from config import settings
@@ -14,6 +15,20 @@ from constants import (
 import json
 
 logger = logging.getLogger(__name__)
+
+# Helper function to convert MongoDB ObjectId to string recursively
+def convert_objectid_to_str(obj):
+    """Recursively convert MongoDB ObjectId objects to strings."""
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_objectid_to_str(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectid_to_str(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_objectid_to_str(item) for item in obj)
+    else:
+        return obj
 
 class TradingBot:
     """Main trading bot that orchestrates agents and executes strategies."""
@@ -53,10 +68,13 @@ class TradingBot:
             
             logger.info(f"Bot started with strategy: {strategy}, symbol: {symbol}, amount: {amount}")
             
+            # Convert ObjectId to strings before returning
+            clean_config = convert_objectid_to_str(self.current_config)
+            
             return {
                 "success": True,
                 "message": f"Bot started successfully with {strategy} strategy",
-                "config": self.current_config
+                "config": clean_config
             }
         
         except Exception as e:
@@ -254,9 +272,12 @@ class TradingBot:
     async def get_status(self) -> Dict[str, Any]:
         """Get current bot status."""
         try:
+            # Convert ObjectId to strings before returning
+            clean_config = convert_objectid_to_str(self.current_config) if self.current_config else None
+            
             status = {
                 "is_running": self.is_running,
-                "config": self.current_config,
+                "config": clean_config,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
@@ -264,7 +285,7 @@ class TradingBot:
                 # Get account balances
                 try:
                     usdt_balance = self.binance_client.get_account_balance("USDT")
-                    symbol = self.current_config.get("symbol", "BTCUSDT")
+                    symbol = self.current_config.get("symbol", "BTCUSDT") if self.current_config else "BTCUSDT"
                     base_asset = symbol.replace("USDT", "")
                     base_balance = self.binance_client.get_account_balance(base_asset)
                     
