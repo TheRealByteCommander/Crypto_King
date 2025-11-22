@@ -83,11 +83,32 @@ const webpackConfig = {
       }
 
       // Disable hot reload completely if environment variable is set
-      if (config.disableHotReload) {
+      if (config.disableHotReload || process.env.NODE_ENV === 'production') {
         // Remove hot reload related plugins
         webpackConfig.plugins = webpackConfig.plugins.filter(plugin => {
-          return !(plugin.constructor.name === 'HotModuleReplacementPlugin');
+          const pluginName = plugin.constructor.name;
+          return !(
+            pluginName === 'HotModuleReplacementPlugin' ||
+            pluginName === 'ReactRefreshWebpackPlugin'
+          );
         });
+
+        // Remove React Refresh from entry points
+        if (webpackConfig.entry) {
+          if (Array.isArray(webpackConfig.entry)) {
+            webpackConfig.entry = webpackConfig.entry.filter(entry => 
+              !entry.includes('react-refresh') && !entry.includes('ReactRefreshEntry')
+            );
+          } else if (typeof webpackConfig.entry === 'object') {
+            Object.keys(webpackConfig.entry).forEach(key => {
+              if (Array.isArray(webpackConfig.entry[key])) {
+                webpackConfig.entry[key] = webpackConfig.entry[key].filter(entry =>
+                  !entry.includes('react-refresh') && !entry.includes('ReactRefreshEntry')
+                );
+              }
+            });
+          }
+        }
 
         // Disable watch mode
         webpackConfig.watch = false;
