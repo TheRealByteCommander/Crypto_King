@@ -55,12 +55,16 @@ if settings.cors_origins and settings.cors_origins.strip() and settings.cors_ori
     # Split by comma and strip whitespace
     cors_origins = [origin.strip() for origin in settings.cors_origins.split(',') if origin.strip()]
 
+# Log CORS configuration for debugging
+logger.info(f"CORS origins configured: {cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Create a router with the /api prefix
@@ -252,7 +256,15 @@ async def get_bot_status():
         return status
     except Exception as e:
         logger.error(f"Error getting bot status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return error response instead of raising HTTPException
+        # This ensures CORS headers are still sent
+        return {
+            "error": True,
+            "message": str(e),
+            "is_running": False,
+            "config": None,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
 
 @api_router.get("/bot/report")
 async def get_bot_report():
