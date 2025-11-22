@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Bot, Send, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { Bot, Send, Loader2 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -11,7 +11,6 @@ const NexusChat = () => {
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
-  const wsRef = useRef(null);
 
   useEffect(() => {
     // Initialize with welcome message
@@ -22,14 +21,8 @@ const NexusChat = () => {
       timestamp: new Date().toISOString()
     }]);
 
-    // Connect to WebSocket for real-time updates
-    connectWebSocket();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
+    // Keine separate WebSocket-Verbindung - Nachrichten kommen über API-Response
+    // WebSocket wird nur für andere Clients (z.B. andere Browser-Tabs) benötigt
   }, []);
 
   useEffect(() => {
@@ -37,56 +30,8 @@ const NexusChat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const connectWebSocket = () => {
-    const wsUrl = BACKEND_URL.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/ws';
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      console.log("WebSocket connected for NexusChat");
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "chat_message") {
-          // Handle real-time chat messages if needed
-          const chatData = data.data;
-          if (chatData && chatData.response) {
-            // Add incoming chat message if it's not already in messages
-            setMessages(prev => {
-              const exists = prev.some(msg => 
-                msg.message === chatData.response && 
-                msg.timestamp === chatData.timestamp
-              );
-              if (!exists) {
-                return [...prev, {
-                  id: Date.now().toString(),
-                  type: "agent",
-                  message: chatData.response,
-                  timestamp: chatData.timestamp
-                }];
-              }
-              return prev;
-            });
-          }
-        }
-      } catch (error) {
-        console.error("Error parsing WebSocket message:", error);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket disconnected for NexusChat");
-      // Reconnect after 3 seconds
-      setTimeout(connectWebSocket, 3000);
-    };
-
-    wsRef.current = ws;
-  };
+  // WebSocket-Verbindung entfernt - Nachrichten kommen direkt über API-Response
+  // Dies verhindert doppelte Nachrichten
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
@@ -110,14 +55,25 @@ const NexusChat = () => {
       });
 
       if (response.data.success) {
-        // Add agent response to chat
+        // Add agent response to chat (nur wenn noch nicht vorhanden)
         const agentMsg = {
-          id: (Date.now() + 1).toString(),
+          id: `agent-${response.data.timestamp || Date.now()}`,
           type: "agent",
           message: response.data.response,
-          timestamp: response.data.timestamp
+          timestamp: response.data.timestamp || new Date().toISOString()
         };
-        setMessages(prev => [...prev, agentMsg]);
+        setMessages(prev => {
+          // Prüfe ob Nachricht bereits existiert (verhindert Duplikate)
+          const exists = prev.some(msg => 
+            msg.message === agentMsg.message && 
+            msg.timestamp === agentMsg.timestamp &&
+            msg.type === "agent"
+          );
+          if (exists) {
+            return prev;
+          }
+          return [...prev, agentMsg];
+        });
       } else {
         toast.error("Fehler beim Senden der Nachricht");
         setMessages(prev => [...prev, {

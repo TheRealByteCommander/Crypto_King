@@ -245,16 +245,17 @@ async def chat_with_nexuschat(request: ChatRequest):
         # Convert ObjectId to strings before returning
         clean_result = convert_objectid_to_str(result)
         
-        # Broadcast chat message via WebSocket
-        await manager.broadcast({
-            "type": "chat_message",
-            "data": {
-                "user": request.message,
-                "agent": "NexusChat",
-                "response": clean_result.get("response", ""),
-                "timestamp": clean_result.get("timestamp")
-            }
-        })
+        # WebSocket-Broadcast entfernt - verhindert doppelte Nachrichten
+        # Die API-Response reicht aus, WebSocket-Broadcast würde zu Duplikaten führen
+        # await manager.broadcast({
+        #     "type": "chat_message",
+        #     "data": {
+        #         "user": request.message,
+        #         "agent": "NexusChat",
+        #         "response": clean_result.get("response", ""),
+        #         "timestamp": clean_result.get("timestamp")
+        #     }
+        # })
         
         return ChatResponse(**clean_result)
     except Exception as e:
