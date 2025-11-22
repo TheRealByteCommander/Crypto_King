@@ -63,7 +63,7 @@ autostart=true
 autorestart=true
 stderr_logfile=/var/log/supervisor/cyphertrade-frontend-error.log
 stdout_logfile=/var/log/supervisor/cyphertrade-frontend.log
-environment=REACT_APP_BACKEND_URL="http://192.168.178.154:8001",NODE_ENV="production",GENERATE_SOURCEMAP="false"
+environment=REACT_APP_BACKEND_URL="http://192.168.178.154:8001",NODE_ENV="development",GENERATE_SOURCEMAP="false"
 stopwaitsecs=10
 killasgroup=true
 priority=998
