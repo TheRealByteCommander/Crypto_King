@@ -1,7 +1,9 @@
-from fastapi import FastAPI, APIRouter, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import StreamingResponse
-from dotenv import load_dotenv
+from fastapi import FastAPI, APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Request, status
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -12,6 +14,7 @@ import uuid
 from datetime import datetime, timezone
 import json
 import asyncio
+import traceback
 
 from config import settings
 from agents import AgentManager
@@ -225,8 +228,14 @@ async def start_bot(request: BotStartRequest):
             data=result.get("config")
         )
     except Exception as e:
-        logger.error(f"Error starting bot: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error starting bot: {e}", exc_info=True)
+        # Return error response instead of raising HTTPException
+        # This ensures CORS headers are still sent
+        return BotResponse(
+            success=False,
+            message=f"Error starting bot: {str(e)}",
+            data=None
+        )
 
 @api_router.post("/bot/stop", response_model=BotResponse)
 async def stop_bot():
