@@ -232,6 +232,7 @@ class AgentManager:
     async def chat_with_nexuschat(self, user_message: str, bot=None, db=None) -> Dict[str, Any]:
         """Chat directly with NexusChat agent with real bot status context."""
         try:
+            logger.info(f"chat_with_nexuschat called with message: {user_message[:100]}...")
             nexuschat = self.agents["nexuschat"]
             user_proxy = self.agents["user_proxy"]
             
@@ -274,6 +275,8 @@ class AgentManager:
             trade_symbol = None
             trade_quantity = None
             trade_amount = None
+            
+            logger.info(f"Checking for trade commands in message: {user_message}")
             
             # Trade keywords
             buy_keywords = ["kauf", "kaufe", "kaufen", "buy", "kauft"]
@@ -428,7 +431,9 @@ class AgentManager:
             
             # If trade request detected, execute it first
             trade_result = None
+            logger.info(f"Trade detection result: trade_side={trade_side}, trade_symbol={trade_symbol}, bot={bot is not None}")
             if trade_side and trade_symbol and bot is not None:
+                logger.info(f"Trade command detected! Side: {trade_side}, Symbol: {trade_symbol}, Quantity: {trade_quantity}, Amount: {trade_amount}")
                 try:
                     # Ensure binance_client is available
                     # If bot is running, binance_client should exist, but check anyway
