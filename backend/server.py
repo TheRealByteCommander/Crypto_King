@@ -296,8 +296,8 @@ async def chat_with_nexuschat(request: ChatRequest):
 async def start_bot(request: BotStartRequest):
     """Start a trading bot (creates new bot if bot_id not provided)."""
     try:
-        # Get or create bot instance
-        bot_id = getattr(request, 'bot_id', None)  # Safe access with default None
+        # Get or create bot instance (bot_id is optional in request)
+        bot_id = request.bot_id if hasattr(request, 'bot_id') and request.bot_id else None
         bot = bot_manager.get_bot(bot_id)
         
         # Check if bot is already running
