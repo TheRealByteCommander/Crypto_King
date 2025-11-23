@@ -438,15 +438,46 @@ class TradingBot:
             self.position_size = 0.0
             self.position_entry_price = 0.0
     
+    async def _get_total_spent(self) -> float:
+        """Calculate total amount spent (BUY trades) for this bot."""
+        try:
+            # Sum all BUY trades for this bot
+            pipeline = [
+                {"$match": {"bot_id": self.bot_id, "side": "BUY"}},
+                {"$group": {"_id": None, "total": {"$sum": "$quote_qty"}}}
+            ]
+            result = await self.db.trades.aggregate(pipeline).to_list(length=1)
+            if result and len(result) > 0:
+                return float(result[0].get("total", 0.0))
+            return 0.0
+        except Exception as e:
+            logger.warning(f"Bot {self.bot_id}: Error calculating total spent: {e}")
+            return 0.0
+    
     async def _execute_trade(self, analysis: Dict[str, Any]):
         """Execute a trade based on analysis."""
         try:
             signal = analysis.get("signal")
             symbol = self.current_config["symbol"]
+            configured_amount = self.current_config["amount"]
             
             if signal == "BUY":
-                # Buy with configured amount
-                amount_usdt = self.current_config["amount"]
+                # Check how much we've already spent
+                total_spent = await self._get_total_spent()
+                available_amount = configured_amount - total_spent
+                
+                if available_amount <= 0:
+                    logger.warning(f"Bot {self.bot_id}: Amount limit reached! Total spent: {total_spent:.2f} USDT, Limit: {configured_amount:.2f} USDT. Skipping BUY trade.")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"⚠️ Amount limit reached! Total spent: {total_spent:.2f} USDT / {configured_amount:.2f} USDT. Skipping BUY trade.",
+                        "warning"
+                    )
+                    return
+                
+                # Use available amount (not full configured amount)
+                amount_usdt = min(available_amount, configured_amount)
+                logger.info(f"Bot {self.bot_id}: Amount check - Total spent: {total_spent:.2f} USDT, Available: {amount_usdt:.2f} USDT, Limit: {configured_amount:.2f} USDT")
                 
                 # Get current price
                 current_price = self.binance_client.get_current_price(symbol)
