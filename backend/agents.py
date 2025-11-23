@@ -384,6 +384,64 @@ class AgentManager:
                 except Exception as e:
                     logger.warning(f"Could not get bot status for context: {e}")
             
+            # If trade request detected, execute it first
+            trade_result = None
+            if trade_side and trade_symbol and bot is not None:
+                try:
+                    # Ensure binance_client is available
+                    if bot.binance_client is None and not bot.is_running:
+                        from binance_client import BinanceClientWrapper
+                        bot.binance_client = BinanceClientWrapper()
+                    
+                    if bot.binance_client is not None:
+                        # Execute the trade
+                        trade_result = await bot.execute_manual_trade(
+                            symbol=trade_symbol,
+                            side=trade_side,
+                            quantity=trade_quantity,
+                            amount_usdt=trade_amount
+                        )
+                        
+                        if trade_result.get("success"):
+                            context_parts.append(f"\n[TRADE AUSGEFÜHRT]")
+                            context_parts.append(f"- Order: {trade_side} {trade_result.get('quantity', trade_quantity or 'all')} {trade_symbol}")
+                            context_parts.append(f"- Preis: {trade_result.get('price', 'N/A')} USDT")
+                            context_parts.append(f"- Order ID: {trade_result.get('order', {}).get('orderId', 'N/A')}")
+                            context_parts.append(f"- Status: Erfolgreich ausgeführt")
+                            
+                            await self.log_agent_message(
+                                "CypherTrade",
+                                f"Manual trade executed via NexusChat: {trade_side} {trade_result.get('quantity', trade_quantity)} {trade_symbol} at {trade_result.get('price')} USDT",
+                                "trade"
+                            )
+                            
+                            logger.info(f"Trade executed successfully: {trade_side} {trade_result.get('quantity')} {trade_symbol}")
+                        else:
+                            context_parts.append(f"\n[TRADE FEHLGESCHLAGEN]")
+                            context_parts.append(f"- Fehler: {trade_result.get('message', 'Unbekannter Fehler')}")
+                            context_parts.append(f"- Bitte versuche es erneut oder kontaktiere den Support.")
+                            
+                            await self.log_agent_message(
+                                "CypherTrade",
+                                f"Manual trade failed: {trade_result.get('message', 'Unknown error')}",
+                                "error"
+                            )
+                            logger.error(f"Trade execution failed: {trade_result.get('message')}")
+                    else:
+                        context_parts.append(f"\n[TRADE FEHLER]")
+                        context_parts.append(f"- Binance Client nicht verfügbar. Bitte starte den Bot zuerst.")
+                except Exception as e:
+                    logger.error(f"Error executing trade from chat: {e}", exc_info=True)
+                    context_parts.append(f"\n[TRADE FEHLER]")
+                    context_parts.append(f"- Fehler beim Ausführen des Trades: {str(e)}")
+                    context_parts.append(f"- Der Trade konnte nicht ausgeführt werden.")
+                    
+                    await self.log_agent_message(
+                        "CypherTrade",
+                        f"Error executing manual trade: {str(e)}",
+                        "error"
+                    )
+            
             # Add recent trade history if available
             # Use explicit None check - database objects cannot be used as boolean
             if db is not None:
@@ -400,7 +458,17 @@ class AgentManager:
             # Combine context with user message
             if context_parts:
                 context_message = "\n".join(context_parts)
-                enhanced_message = f"{user_message}\n\n{context_message}\n\nBitte verwende NUR diese echten Daten und erfinde keine Informationen!"
+                
+                # Add instruction for trade requests
+                if trade_side and trade_symbol:
+                    if trade_result and trade_result.get("success"):
+                        enhanced_message = f"{user_message}\n\n{context_message}\n\nWICHTIG: Der Trade wurde soeben von CypherTrade erfolgreich ausgeführt. Bestätige dem Benutzer den erfolgreichen Trade mit allen Details aus dem Kontext (Order ID, Preis, Menge)."
+                    elif trade_result and not trade_result.get("success"):
+                        enhanced_message = f"{user_message}\n\n{context_message}\n\nWICHTIG: Der Trade konnte nicht ausgeführt werden. Informiere den Benutzer über den Fehler klar und hilfreich. Gib dem Benutzer eine Erklärung, warum der Trade fehlgeschlagen ist."
+                    else:
+                        enhanced_message = f"{user_message}\n\n{context_message}\n\nWICHTIG: Der Trade konnte nicht ausgeführt werden. Informiere den Benutzer über den Fehler."
+                else:
+                    enhanced_message = f"{user_message}\n\n{context_message}\n\nBitte verwende NUR diese echten Daten und erfinde keine Informationen!"
             else:
                 enhanced_message = f"{user_message}\n\nWICHTIG: Wenn du keine echten Daten hast, sage das klar. Erfinde keine Kurse, Positionen oder andere Informationen!"
             
