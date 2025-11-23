@@ -236,6 +236,23 @@ class AgentManager:
             nexuschat = self.agents["nexuschat"]
             user_proxy = self.agents["user_proxy"]
             
+            # Handle BotManager - get first running bot or default bot
+            actual_bot = None
+            if bot is not None:
+                # Check if bot is BotManager or TradingBot
+                from bot_manager import BotManager
+                if isinstance(bot, BotManager):
+                    # Get first running bot, or default bot
+                    running_bots = [b for b in bot.get_all_bots().values() if b.is_running]
+                    if running_bots:
+                        actual_bot = running_bots[0]  # Use first running bot
+                    else:
+                        # Use default bot or create one
+                        actual_bot = bot.get_bot()
+                else:
+                    # It's a TradingBot instance
+                    actual_bot = bot
+            
             # Check if user is asking for a price and automatically fetch it
             user_lower = user_message.lower()
             price_query = None
@@ -422,8 +439,8 @@ class AgentManager:
                     # Try to use bot's binance_client if available, otherwise create temporary one
                     from binance_client import BinanceClientWrapper
                     
-                    if bot is not None and bot.binance_client is not None:
-                        current_price = bot.binance_client.get_current_price(symbol_to_fetch)
+                    if actual_bot is not None and actual_bot.binance_client is not None:
+                        current_price = actual_bot.binance_client.get_current_price(symbol_to_fetch)
                     elif self.binance_client is not None:
                         current_price = self.binance_client.get_current_price(symbol_to_fetch)
                     else:
@@ -443,9 +460,9 @@ class AgentManager:
             
             # Add bot status if available
             # Use explicit None check - database objects cannot be used as boolean
-            if bot is not None:
+            if actual_bot is not None:
                 try:
-                    bot_status = await bot.get_status()
+                    bot_status = await actual_bot.get_status()
                     if bot_status.get("is_running"):
                         config = bot_status.get("config", {})
                         symbol = config.get("symbol", "N/A")
@@ -459,9 +476,9 @@ class AgentManager:
                         context_parts.append(f"- Betrag: ${amount}")
                         
                         # Get current price if bot is running and has binance_client
-                        if bot.binance_client is not None and symbol and symbol != "N/A":
+                        if actual_bot.binance_client is not None and symbol and symbol != "N/A":
                             try:
-                                current_price = bot.binance_client.get_current_price(symbol)
+                                current_price = actual_bot.binance_client.get_current_price(symbol)
                                 context_parts.append(f"- Aktueller Kurs für {symbol}: {current_price} USDT")
                             except Exception as e:
                                 logger.warning(f"Could not get current price for {symbol}: {e}")
@@ -479,21 +496,21 @@ class AgentManager:
             
             # If trade request detected, execute it first
             trade_result = None
-            logger.info(f"Trade detection result: trade_side={trade_side}, trade_symbol={trade_symbol}, bot={bot is not None}")
-            if trade_side and trade_symbol and bot is not None:
+            logger.info(f"Trade detection result: trade_side={trade_side}, trade_symbol={trade_symbol}, bot={actual_bot is not None}")
+            if trade_side and trade_symbol and actual_bot is not None:
                 logger.info(f"Trade command detected! Side: {trade_side}, Symbol: {trade_symbol}, Quantity: {trade_quantity}, Amount: {trade_amount}")
                 try:
                     # Ensure binance_client is available
                     # If bot is running, binance_client should exist, but check anyway
-                    if bot.binance_client is None:
+                    if actual_bot.binance_client is None:
                         from binance_client import BinanceClientWrapper
-                        logger.warning(f"Bot binance_client is None, creating new client (bot.is_running={bot.is_running})")
-                        bot.binance_client = BinanceClientWrapper()
+                        logger.warning(f"Bot binance_client is None, creating new client (bot.is_running={actual_bot.is_running})")
+                        actual_bot.binance_client = BinanceClientWrapper()
                     
-                    if bot.binance_client is not None:
+                    if actual_bot.binance_client is not None:
                         logger.info(f"Executing manual trade: {trade_side} {trade_quantity or trade_amount or 'all'} {trade_symbol}")
                         # Execute the trade
-                        trade_result = await bot.execute_manual_trade(
+                        trade_result = await actual_bot.execute_manual_trade(
                             symbol=trade_symbol,
                             side=trade_side,
                             quantity=trade_quantity,

@@ -29,7 +29,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001'
 const API = `${BACKEND_URL}/api`;
 
 const Dashboard = () => {
-  const [botStatus, setBotStatus] = useState(null);
+  const [botsStatus, setBotsStatus] = useState({}); // Dictionary: { bot_id: status }
   const [stats, setStats] = useState(null);
   const [agents, setAgents] = useState(null);
   const [ws, setWs] = useState(null);
@@ -80,21 +80,40 @@ const Dashboard = () => {
         // Throttle status updates to reduce performance warnings
         const now = Date.now();
         if (now - lastStatusUpdate >= STATUS_UPDATE_THROTTLE_MS) {
-          setBotStatus(data.data);
+          // Handle both single bot status and all bots status
+          if (data.bot_id) {
+            // Single bot update
+            setBotsStatus(prev => ({
+              ...prev,
+              [data.bot_id]: data.data
+            }));
+          } else if (data.data && typeof data.data === 'object' && !data.data.bot_id) {
+            // All bots status object
+            setBotsStatus(data.data);
+          } else {
+            // Single bot status (backward compatibility)
+            setBotsStatus(prev => ({
+              ...prev,
+              [data.data?.bot_id || 'default']: data.data
+            }));
+          }
           lastStatusUpdate = now;
         }
       } else if (data.type === "bot_started") {
         // Only show success if it was actually successful
         if (data.success !== false) {
-          toast.success(data.message || "Bot started successfully!");
+          const botId = data.bot_id || data.data?.bot_id || 'unknown';
+          toast.success(`${data.message || "Bot started successfully!"} (ID: ${botId.substring(0, 8)}...)`);
         }
         fetchAllData();
       } else if (data.type === "bot_start_failed") {
         // Show error message when bot start failed
-        toast.error(data.message || "Failed to start bot");
+        const botId = data.bot_id || 'unknown';
+        toast.error(`${data.message || "Failed to start bot"} (ID: ${botId.substring(0, 8)}...)`);
         fetchAllData();
       } else if (data.type === "bot_stopped") {
-        toast.success("Bot stopped");
+        const botId = data.bot_id || data.data?.bot_id || 'unknown';
+        toast.success(`Bot stopped (ID: ${botId.substring(0, 8)}...)`);
         fetchAllData();
       }
     };
@@ -114,12 +133,21 @@ const Dashboard = () => {
   const fetchAllData = async () => {
     try {
       const [statusRes, statsRes, agentsRes] = await Promise.all([
-        axios.get(`${API}/bot/status`),
+        axios.get(`${API}/bot/status`), // Returns all bots status
         axios.get(`${API}/stats`),
         axios.get(`${API}/agents`)
       ]);
       
-      setBotStatus(statusRes.data);
+      // Handle both single bot response (backward compatibility) and multiple bots
+      if (statusRes.data && typeof statusRes.data === 'object') {
+        if (statusRes.data.bot_id) {
+          // Single bot response (backward compatibility)
+          setBotsStatus({ [statusRes.data.bot_id]: statusRes.data });
+        } else {
+          // Multiple bots response
+          setBotsStatus(statusRes.data);
+        }
+      }
       setStats(statsRes.data);
       setAgents(agentsRes.data.agents);
     } catch (error) {
@@ -221,10 +249,10 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Bot Control */}
+          {/* Bot Control - Multi-Bot Support */}
           <div className="mb-4 md:mb-8">
             <BotControl 
-              botStatus={botStatus} 
+              botsStatus={botsStatus} 
               onStatusChange={fetchAllData}
             />
           </div>

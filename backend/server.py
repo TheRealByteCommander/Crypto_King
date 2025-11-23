@@ -19,7 +19,7 @@ import traceback
 
 from config import settings
 from agents import AgentManager
-from bot_manager import get_bot_instance
+from bot_manager import BotManager, TradingBot
 from constants import BOT_BROADCAST_INTERVAL_SECONDS
 from validators import validate_all_services, validate_mongodb_connection
 from mcp_server import create_mcp_server
@@ -74,18 +74,17 @@ app.add_middleware(
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# Initialize agents and bot
-# Initialize agent_manager first, then bot (which will get agent_manager)
-# We'll update agent_manager with bot and binance_client after bot is created
+# Initialize agents and bot manager
+# Initialize agent_manager first, then bot_manager
 agent_manager = AgentManager(db, bot=None, binance_client=None)
-bot = get_bot_instance(db, agent_manager)
-# Update agent_manager with bot reference (binance_client will be available when bot starts)
-agent_manager.bot = bot
-# binance_client will be set when bot starts, but we can prepare the reference
-# agent_manager.binance_client = bot.binance_client  # Will be set when bot starts
+bot_manager = BotManager(db, agent_manager)
+# Update agent_manager with bot_manager reference
+agent_manager.bot = bot_manager
+# For backward compatibility, create a default bot instance
+default_bot = bot_manager.get_bot()
 
 # Initialize MCP Server if enabled
-mcp_server = create_mcp_server(db, agent_manager, bot)
+mcp_server = create_mcp_server(db, agent_manager, bot_manager)
 if mcp_server:
     app.include_router(mcp_server.router)
     logger.info("MCP Server routes registered")
@@ -212,7 +211,8 @@ async def health_check():
     return {
         "status": "healthy" if all_services_valid else "degraded",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "bot_running": bot.is_running,
+        "bot_running": any(bot.is_running for bot in bot_manager.get_all_bots().values()),
+        "active_bots": len([b for b in bot_manager.get_all_bots().values() if b.is_running]),
         "agents": {
             "nexuschat": settings.nexuschat_llm_provider,
             "cyphermind": settings.cyphermind_llm_provider,
@@ -263,7 +263,7 @@ async def chat_with_nexuschat(request: ChatRequest):
     try:
         logger.info(f"Chat request received: {request.message[:100]}...")  # Log first 100 chars
         # Pass bot and db to chat_with_nexuschat so it can access real data
-        result = await agent_manager.chat_with_nexuschat(request.message, bot=bot, db=db)
+        result = await agent_manager.chat_with_nexuschat(request.message, bot=bot_manager, db=db)
         logger.info(f"Chat response generated: success={result.get('success')}, agent={result.get('agent')}")
         
         # Convert ObjectId to strings before returning
@@ -293,8 +293,19 @@ async def chat_with_nexuschat(request: ChatRequest):
 
 @api_router.post("/bot/start", response_model=BotResponse)
 async def start_bot(request: BotStartRequest):
-    """Start the trading bot."""
+    """Start a trading bot (creates new bot if bot_id not provided)."""
     try:
+        # Get or create bot instance
+        bot = bot_manager.get_bot(request.bot_id)
+        
+        # Check if bot is already running
+        if bot.is_running:
+            return BotResponse(
+                success=False,
+                message=f"Bot {bot.bot_id} is already running",
+                data=None
+            )
+        
         result = await bot.start(request.strategy, request.symbol, request.amount)
         
         # Convert ObjectId to strings before broadcasting and returning
@@ -305,7 +316,8 @@ async def start_bot(request: BotStartRequest):
             await manager.broadcast({
                 "type": "bot_started",
                 "data": clean_result,
-                "success": True
+                "success": True,
+                "bot_id": bot.bot_id
             })
         else:
             # Broadcast error message if bot failed to start
@@ -313,7 +325,8 @@ async def start_bot(request: BotStartRequest):
                 "type": "bot_start_failed",
                 "data": clean_result,
                 "success": False,
-                "message": result["message"]
+                "message": result["message"],
+                "bot_id": bot.bot_id
             })
         
         return BotResponse(
@@ -332,9 +345,16 @@ async def start_bot(request: BotStartRequest):
         )
 
 @api_router.post("/trade/execute", response_model=ManualTradeResponse)
-async def execute_manual_trade(request: ManualTradeRequest):
-    """Execute a manual trade order."""
+async def execute_manual_trade(request: ManualTradeRequest, bot_id: Optional[str] = None):
+    """Execute a manual trade order (uses default bot if bot_id not provided)."""
     try:
+        # Get bot instance (use default if not specified)
+        if bot_id:
+            bot = bot_manager.get_bot(bot_id)
+        else:
+            # Use default bot or create one
+            bot = default_bot
+        
         # Ensure bot has binance_client
         if bot.binance_client is None:
             # Initialize binance client if bot is not running
@@ -378,37 +398,62 @@ async def execute_manual_trade(request: ManualTradeRequest):
             order=None
         )
 
-@api_router.post("/bot/stop", response_model=BotResponse)
-async def stop_bot():
-    """Stop the trading bot."""
+@api_router.post("/bot/stop")
+async def stop_bot(bot_id: Optional[str] = None):
+    """Stop a trading bot (stops all bots if bot_id not provided)."""
     try:
-        result = await bot.stop()
-        
-        # Broadcast status update
-        await manager.broadcast({
-            "type": "bot_stopped",
-            "data": result
-        })
-        
-        return BotResponse(
-            success=result["success"],
-            message=result["message"]
-        )
+        if bot_id:
+            # Stop specific bot
+            bot = bot_manager.get_bot(bot_id)
+            result = await bot.stop()
+            
+            await manager.broadcast({
+                "type": "bot_stopped",
+                "data": result,
+                "bot_id": bot_id
+            })
+            
+            return BotResponse(
+                success=result["success"],
+                message=result["message"]
+            )
+        else:
+            # Stop all running bots
+            stopped_bots = []
+            for bot_id, bot in bot_manager.get_all_bots().items():
+                if bot.is_running:
+                    result = await bot.stop()
+                    stopped_bots.append({"bot_id": bot_id, "result": result})
+                    await manager.broadcast({
+                        "type": "bot_stopped",
+                        "data": result,
+                        "bot_id": bot_id
+                    })
+            
+            return BotResponse(
+                success=True,
+                message=f"Stopped {len(stopped_bots)} bot(s)",
+                data={"stopped_bots": stopped_bots}
+            )
     except Exception as e:
         logger.error(f"Error stopping bot: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/bot/status")
-async def get_bot_status():
-    """Get current bot status."""
+async def get_bot_status(bot_id: Optional[str] = None):
+    """Get bot status (all bots if bot_id not provided)."""
     try:
-        status = await bot.get_status()
-        # Convert ObjectId to strings before returning
-        return convert_objectid_to_str(status)
+        if bot_id:
+            # Get specific bot status
+            bot = bot_manager.get_bot(bot_id)
+            status = await bot.get_status()
+            return convert_objectid_to_str(status)
+        else:
+            # Get all bots status
+            all_statuses = await bot_manager.get_all_bots_status()
+            return convert_objectid_to_str(all_statuses)
     except Exception as e:
         logger.error(f"Error getting bot status: {e}")
-        # Return error response instead of raising HTTPException
-        # This ensures CORS headers are still sent
         return {
             "error": True,
             "message": str(e),
@@ -647,15 +692,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Background task to broadcast updates
 async def broadcast_updates():
-    """Background task to broadcast bot status updates."""
+    """Background task to broadcast bot status updates for all running bots."""
     while True:
         try:
-            if bot.is_running:
-                status = await bot.get_status()
-                await manager.broadcast({
-                    "type": "status_update",
-                    "data": status
-                })
+            # Broadcast status for all running bots
+            for bot_id, bot in bot_manager.get_all_bots().items():
+                if bot.is_running:
+                    status = await bot.get_status()
+                    await manager.broadcast({
+                        "type": "status_update",
+                        "data": status,
+                        "bot_id": bot_id
+                    })
             await asyncio.sleep(BOT_BROADCAST_INTERVAL_SECONDS)
         except Exception as e:
             logger.error(f"Error broadcasting updates: {e}")

@@ -82,7 +82,12 @@ class MCPServer:
             
             try:
                 if tool_name == "get_bot_status":
-                    status = await self.bot.get_status()
+                    # Handle BotManager - get all bots status
+                    from bot_manager import BotManager
+                    if isinstance(self.bot, BotManager):
+                        status = await self.bot.get_all_bots_status()
+                    else:
+                        status = await self.bot.get_status()
                     return {
                         "success": True,
                         "result": status

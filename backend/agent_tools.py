@@ -370,7 +370,18 @@ class AgentTools:
             elif tool_name == "get_bot_status":
                 if self.bot is None:
                     return {"error": "Bot not available", "success": False}
-                status = await self.bot.get_status()
+                # Handle BotManager - get first running bot or default bot
+                from bot_manager import BotManager
+                if isinstance(self.bot, BotManager):
+                    # Get first running bot, or default bot
+                    running_bots = [b for b in self.bot.get_all_bots().values() if b.is_running]
+                    if running_bots:
+                        actual_bot = running_bots[0]
+                    else:
+                        actual_bot = self.bot.get_bot()
+                    status = await actual_bot.get_status()
+                else:
+                    status = await self.bot.get_status()
                 return {"success": True, "result": status}
             
             elif tool_name == "get_trade_history":
