@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { formatBerlinTimeOnly } from "../utils/dateUtils";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -30,7 +31,7 @@ const PerformanceChart = () => {
 
         return {
           name: `Trade ${index + 1}`,
-          timestamp: new Date(trade.timestamp).toLocaleTimeString(),
+          timestamp: formatBerlinTimeOnly(trade.timestamp),
           balance: runningBalance,
           type: trade.side
         };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Bot, Brain, Zap, Info, AlertTriangle, Activity } from "lucide-react";
+import { formatBerlinTimeOnly } from "../utils/dateUtils";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -78,7 +79,7 @@ const AgentLogs = () => {
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-sm">{log.agent_name}</span>
                   <span className="text-xs text-slate-500 mono">
-                    {new Date(log.timestamp).toLocaleTimeString()}
+                    {formatBerlinTimeOnly(log.timestamp)}
                   </span>
                 </div>
                 <p className="text-sm leading-relaxed">{log.message}</p>

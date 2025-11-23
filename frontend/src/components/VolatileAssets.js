@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { TrendingUp, TrendingDown, RefreshCw, Zap } from "lucide-react";
+import { formatBerlinTimeOnly } from "../utils/dateUtils";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -96,7 +97,7 @@ const VolatileAssets = () => {
 
       {lastUpdate && (
         <p className="text-sm text-slate-400 mb-4">
-          Letzte Aktualisierung: {lastUpdate.toLocaleTimeString('de-DE')}
+          Letzte Aktualisierung: {formatBerlinTimeOnly(lastUpdate)}
         </p>
       )}
 

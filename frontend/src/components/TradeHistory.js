@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { TrendingUp, TrendingDown, ExternalLink } from "lucide-react";
+import { formatBerlinDateTime } from "../utils/dateUtils";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -63,7 +64,7 @@ const TradeHistory = () => {
               data-testid={`trade-row-${index}`}
             >
               <td className="py-3 px-4 text-sm text-slate-300 mono">
-                {new Date(trade.timestamp).toLocaleString()}
+                {formatBerlinDateTime(trade.timestamp)}
               </td>
               <td className="py-3 px-4 text-sm text-slate-100 font-medium mono">
                 {trade.symbol}

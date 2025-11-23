@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { Bot, Send, Loader2 } from "lucide-react";
+import { formatBerlinTimeOnly } from "../utils/dateUtils";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -105,15 +106,7 @@ const NexusChat = () => {
   };
 
   const formatTime = (timestamp) => {
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleTimeString("de-DE", { 
-        hour: "2-digit", 
-        minute: "2-digit" 
-      });
-    } catch {
-      return "";
-    }
+    return formatBerlinTimeOnly(timestamp);
   };
 
   return (
