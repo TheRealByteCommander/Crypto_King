@@ -4,6 +4,21 @@
 
 Dieser Fehler bedeutet, dass der Binance API Key ungültig oder falsch konfiguriert ist.
 
+## ⚠️ WICHTIG: Binance Testnet Limitation
+
+**Binance Testnet unterstützt NUR Spot Trading - KEIN Margin oder Futures!**
+
+- ✅ **SPOT Mode**: Funktioniert auf Testnet
+- ❌ **MARGIN Mode**: Funktioniert **NICHT** auf Testnet
+- ❌ **FUTURES Mode**: Funktioniert **NICHT** auf Testnet
+
+Falls du MARGIN oder FUTURES Trading verwenden möchtest, benötigst du:
+1. Einen Binance **Mainnet** Account
+2. Einen **Mainnet** API Key
+3. `BINANCE_TESTNET=false` in der `.env` Datei
+
+**Der Bot verhindert jetzt automatisch den Start von MARGIN/FUTURES Bots auf Testnet.**
+
 ## Lösung
 
 ### Schritt 1: API Key Diagnose
