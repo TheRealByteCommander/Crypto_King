@@ -70,6 +70,9 @@ class TradingBot:
             # Save to database
             await self.db.bot_config.insert_one(self.current_config)
             
+            # Analyze historical market data before starting bot loop
+            await self._analyze_historical_market_context(symbol_upper, strategy)
+            
             self.is_running = True
             
             # Start bot loop in background
