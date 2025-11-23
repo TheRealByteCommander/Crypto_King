@@ -504,11 +504,14 @@ class AgentManager:
                 # Add instruction for trade requests
                 if trade_side and trade_symbol:
                     if trade_result and trade_result.get("success"):
-                        enhanced_message = f"{user_message}\n\n{context_message}\n\nWICHTIG: Der Trade wurde soeben von CypherTrade erfolgreich ausgeführt. Bestätige dem Benutzer den erfolgreichen Trade mit allen Details aus dem Kontext (Order ID, Preis, Menge)."
+                        # Trade was successful - use ONLY real data from context
+                        enhanced_message = f"{user_message}\n\n{context_message}\n\nKRITISCH WICHTIG - NUR ECHTE DATEN VERWENDEN:\n- Der Trade wurde von CypherTrade ausgeführt.\n- Verwende NUR die Informationen aus dem [TRADE AUSGEFÜHRT] Abschnitt im Kontext.\n- Wenn keine Order ID im Kontext steht, sage klar, dass die Order ID nicht verfügbar ist.\n- Erfinde KEINE Order IDs, Preise oder andere Details!\n- Wenn etwas nicht im Kontext steht, sage klar, dass diese Information nicht verfügbar ist."
                     elif trade_result and not trade_result.get("success"):
-                        enhanced_message = f"{user_message}\n\n{context_message}\n\nWICHTIG: Der Trade konnte nicht ausgeführt werden. Informiere den Benutzer über den Fehler klar und hilfreich. Gib dem Benutzer eine Erklärung, warum der Trade fehlgeschlagen ist."
+                        # Trade failed - inform user about the error
+                        enhanced_message = f"{user_message}\n\n{context_message}\n\nKRITISCH WICHTIG:\n- Der Trade konnte NICHT ausgeführt werden.\n- Verwende NUR die Fehlermeldung aus dem [TRADE FEHLGESCHLAGEN] Abschnitt im Kontext.\n- Sage klar und direkt, dass der Trade fehlgeschlagen ist und warum.\n- Erfinde KEINE Details über einen erfolgreichen Trade!\n- Wenn der Fehler im Kontext steht, erkläre ihn dem Benutzer."
                     else:
-                        enhanced_message = f"{user_message}\n\n{context_message}\n\nWICHTIG: Der Trade konnte nicht ausgeführt werden. Informiere den Benutzer über den Fehler."
+                        # Trade execution was attempted but no result
+                        enhanced_message = f"{user_message}\n\n{context_message}\n\nKRITISCH WICHTIG:\n- Der Trade konnte NICHT ausgeführt werden.\n- Es gibt KEINE [TRADE AUSGEFÜHRT] Information im Kontext.\n- Sage klar, dass der Trade nicht ausgeführt werden konnte.\n- Erfinde KEINE Order IDs, Preise oder Erfolgsmeldungen!\n- Informiere den Benutzer, dass ein Fehler aufgetreten ist."
                 else:
                     enhanced_message = f"{user_message}\n\n{context_message}\n\nBitte verwende NUR diese echten Daten und erfinde keine Informationen!"
             else:
