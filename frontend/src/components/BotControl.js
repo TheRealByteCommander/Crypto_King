@@ -183,7 +183,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
         </div>
         
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="strategy" className="text-slate-300 mb-2 block">Strategy</Label>
               <Select value={strategy} onValueChange={setStrategy}>
@@ -211,6 +211,24 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                 placeholder="BTCUSDT"
                 data-testid="symbol-input"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="timeframe" className="text-slate-300 mb-2 block">Timeframe</Label>
+              <Select value={timeframe} onValueChange={setTimeframe}>
+                <SelectTrigger className="bg-slate-800/50 border-indigo-500/30" data-testid="timeframe-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1m">1 Minute</SelectItem>
+                  <SelectItem value="5m">5 Minuten</SelectItem>
+                  <SelectItem value="15m">15 Minuten</SelectItem>
+                  <SelectItem value="30m">30 Minuten</SelectItem>
+                  <SelectItem value="1h">1 Stunde</SelectItem>
+                  <SelectItem value="4h">4 Stunden</SelectItem>
+                  <SelectItem value="1d">1 Tag</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
