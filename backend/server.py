@@ -240,7 +240,8 @@ async def list_strategies():
 async def chat_with_nexuschat(request: ChatRequest):
     """Chat with NexusChat agent."""
     try:
-        result = await agent_manager.chat_with_nexuschat(request.message)
+        # Pass bot and db to chat_with_nexuschat so it can access real data
+        result = await agent_manager.chat_with_nexuschat(request.message, bot=bot, db=db)
         
         # Convert ObjectId to strings before returning
         clean_result = convert_objectid_to_str(result)

@@ -211,11 +211,68 @@ class AgentManager:
             raise ValueError(f"Agent {agent_name} not found")
         return self.agents[agent_name]
     
-    async def chat_with_nexuschat(self, user_message: str) -> Dict[str, Any]:
-        """Chat directly with NexusChat agent."""
+    async def chat_with_nexuschat(self, user_message: str, bot=None, db=None) -> Dict[str, Any]:
+        """Chat directly with NexusChat agent with real bot status context."""
         try:
             nexuschat = self.agents["nexuschat"]
             user_proxy = self.agents["user_proxy"]
+            
+            # Build context message with real bot status and market data
+            context_parts = []
+            
+            # Add bot status if available
+            if bot:
+                try:
+                    bot_status = await bot.get_status()
+                    if bot_status.get("is_running"):
+                        config = bot_status.get("config", {})
+                        symbol = config.get("symbol", "N/A")
+                        strategy = config.get("strategy", "N/A")
+                        amount = config.get("amount", 0)
+                        
+                        context_parts.append(f"\n[AKTUELLER BOT-STATUS]")
+                        context_parts.append(f"- Bot läuft: Ja")
+                        context_parts.append(f"- Symbol: {symbol}")
+                        context_parts.append(f"- Strategie: {strategy}")
+                        context_parts.append(f"- Betrag: ${amount}")
+                        
+                        # Get current price if bot is running and has binance_client
+                        if bot.binance_client and symbol and symbol != "N/A":
+                            try:
+                                current_price = bot.binance_client.get_current_price(symbol)
+                                context_parts.append(f"- Aktueller Kurs für {symbol}: {current_price} USDT")
+                            except Exception as e:
+                                logger.warning(f"Could not get current price for {symbol}: {e}")
+                        
+                        # Get balances
+                        balances = bot_status.get("balances", {})
+                        if balances:
+                            balance_info = ", ".join([f"{asset}: {bal}" for asset, bal in balances.items()])
+                            context_parts.append(f"- Balances: {balance_info}")
+                    else:
+                        context_parts.append(f"\n[AKTUELLER BOT-STATUS]")
+                        context_parts.append(f"- Bot läuft: Nein")
+                except Exception as e:
+                    logger.warning(f"Could not get bot status for context: {e}")
+            
+            # Add recent trade history if available
+            if db:
+                try:
+                    recent_trades = await db.trades.find({}, {"_id": 0}).sort("timestamp", -1).limit(5).to_list(5)
+                    if recent_trades:
+                        context_parts.append(f"\n[LETZTE TRADES]")
+                        for trade in recent_trades[:3]:  # Show only last 3
+                            trade_info = f"- {trade.get('side', 'N/A')} {trade.get('symbol', 'N/A')}: {trade.get('quantity', 0)} @ {trade.get('price', 0)} USDT"
+                            context_parts.append(trade_info)
+                except Exception as e:
+                    logger.warning(f"Could not get recent trades for context: {e}")
+            
+            # Combine context with user message
+            if context_parts:
+                context_message = "\n".join(context_parts)
+                enhanced_message = f"{user_message}\n\n{context_message}\n\nBitte verwende NUR diese echten Daten und erfinde keine Informationen!"
+            else:
+                enhanced_message = f"{user_message}\n\nWICHTIG: Wenn du keine echten Daten hast, sage das klar. Erfinde keine Kurse, Positionen oder andere Informationen!"
             
             # Create a simple chat between user_proxy and nexuschat
             # Use initiate_chat for direct communication (synchronous method)
@@ -228,7 +285,7 @@ class AgentManager:
                 None,
                 lambda: user_proxy.initiate_chat(
                     recipient=nexuschat,
-                    message=user_message,
+                    message=enhanced_message,
                     max_turns=1,  # Single turn for direct chat
                     clear_history=False,  # Keep context
                     silent=False  # Allow logging
