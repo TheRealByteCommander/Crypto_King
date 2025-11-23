@@ -15,6 +15,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [amount, setAmount] = useState("100");
   const [timeframe, setTimeframe] = useState("5m");
+  const [tradingMode, setTradingMode] = useState("SPOT");
   const [loading, setLoading] = useState(false);
   const [strategies, setStrategies] = useState({
     "ma_crossover": "Moving Average Crossover (SMA 20/50)",
@@ -54,7 +55,8 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
         strategy,
         symbol,
         amount: parseFloat(amount),
-        timeframe
+        timeframe,
+        trading_mode: tradingMode
       });
       
       if (response.data.success) {
@@ -64,6 +66,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
         setSymbol("BTCUSDT");
         setAmount("100");
         setTimeframe("5m");
+        setTradingMode("SPOT");
       } else {
         toast.error(response.data.message || "Failed to start bot");
       }
@@ -132,7 +135,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                         ID: {bot.botId.substring(0, 8)}...
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                       <div>
                         <p className="text-slate-400 mb-1">Strategy</p>
                         <p className="text-slate-100 font-medium mono">
@@ -149,6 +152,12 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                         <p className="text-slate-400 mb-1">Timeframe</p>
                         <p className="text-slate-100 font-medium mono">
                           {bot.config?.timeframe || "5m"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 mb-1">Mode</p>
+                        <p className="text-slate-100 font-medium mono">
+                          {bot.config?.trading_mode || "SPOT"}
                         </p>
                       </div>
                       <div>
@@ -183,7 +192,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
         </div>
         
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <Label htmlFor="strategy" className="text-slate-300 mb-2 block">Strategy</Label>
               <Select value={strategy} onValueChange={setStrategy}>
@@ -227,6 +236,20 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                   <SelectItem value="1h">1 Stunde</SelectItem>
                   <SelectItem value="4h">4 Stunden</SelectItem>
                   <SelectItem value="1d">1 Tag</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="trading-mode" className="text-slate-300 mb-2 block">Trading Mode</Label>
+              <Select value={tradingMode} onValueChange={setTradingMode}>
+                <SelectTrigger className="bg-slate-800/50 border-indigo-500/30" data-testid="trading-mode-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SPOT">SPOT (Long Only)</SelectItem>
+                  <SelectItem value="MARGIN">MARGIN (Long + Short)</SelectItem>
+                  <SelectItem value="FUTURES">FUTURES (Long + Short)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
