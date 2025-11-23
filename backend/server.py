@@ -589,9 +589,9 @@ async def get_volatile_assets(limit: int = 20):
                     timeout=20.0  # 20 seconds timeout
                 )
                 logger.info(f"30-day analysis completed: {len(tickers)} assets found")
-                # If no assets found, fallback to 24h
-                if len(tickers) == 0:
-                    logger.warning("30-day analysis found 0 assets, using 24h ticker stats as fallback")
+                # If no assets found or too few, fallback to 24h
+                if len(tickers) < 5:
+                    logger.warning(f"30-day analysis found only {len(tickers)} assets (<5), using 24h ticker stats as fallback")
                     tickers = binance_client.get_24h_ticker_stats()
             except asyncio.TimeoutError:
                 logger.warning("30-day analysis timed out, using 24h ticker stats as fallback")
