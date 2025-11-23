@@ -152,27 +152,26 @@ class BinanceClientWrapper:
             return {}
     
     def get_tradable_symbols(self) -> List[Dict[str, Any]]:
-        """Get all tradable symbols from Binance (USDT pairs only)."""
+        """Get all tradable symbols from Binance (all trading types and quote assets)."""
         try:
             exchange_info = self.client.get_exchange_info()
             tradable_symbols = []
             
             for symbol_info in exchange_info.get('symbols', []):
-                # Only include symbols that:
+                # Include all symbols that are tradable:
                 # 1. Have status = 'TRADING'
-                # 2. Are SPOT trading type
-                # 3. End with USDT (or can be filtered for other quote assets)
-                if (symbol_info.get('status') == 'TRADING' and 
-                    symbol_info.get('type') == 'SPOT' and
-                    symbol_info.get('quoteAsset') == 'USDT'):
+                # 2. Can be any trading type (SPOT, MARGIN, FUTURES, etc.)
+                # 3. Can have any quote asset (USDT, BUSD, BTC, ETH, BNB, etc.)
+                if symbol_info.get('status') == 'TRADING':
                     tradable_symbols.append({
                         'symbol': symbol_info.get('symbol', ''),
                         'baseAsset': symbol_info.get('baseAsset', ''),
                         'quoteAsset': symbol_info.get('quoteAsset', ''),
+                        'type': symbol_info.get('type', 'UNKNOWN'),
                         'status': symbol_info.get('status', 'UNKNOWN')
                     })
             
-            logger.info(f"Found {len(tradable_symbols)} tradable USDT pairs on Binance")
+            logger.info(f"Found {len(tradable_symbols)} tradable symbols on Binance (all types)")
             return sorted(tradable_symbols, key=lambda x: x['symbol'])
         
         except Exception as e:
@@ -181,7 +180,7 @@ class BinanceClientWrapper:
     
     def is_symbol_tradable(self, symbol: str) -> Tuple[bool, Optional[str]]:
         """
-        Check if a symbol is tradable on Binance.
+        Check if a symbol is tradable on Binance (all trading types and quote assets).
         Returns: (is_tradable: bool, error_message: Optional[str])
         """
         try:
@@ -191,36 +190,32 @@ class BinanceClientWrapper:
             symbol_upper = symbol.upper()
             for symbol_info in exchange_info.get('symbols', []):
                 if symbol_info.get('symbol') == symbol_upper:
-                    # Check if it's tradable
+                    # Check if it's tradable (only status check, no type or quote asset restriction)
                     status = symbol_info.get('status', 'UNKNOWN')
                     if status != 'TRADING':
                         return False, f"Symbol {symbol_upper} exists but is not tradable (status: {status})"
                     
+                    # Symbol is valid and tradable (any type, any quote asset)
                     symbol_type = symbol_info.get('type', 'UNKNOWN')
-                    if symbol_type != 'SPOT':
-                        return False, f"Symbol {symbol_upper} exists but is not a SPOT trading pair (type: {symbol_type})"
-                    
                     quote_asset = symbol_info.get('quoteAsset', 'UNKNOWN')
-                    if quote_asset != 'USDT':
-                        return False, f"Symbol {symbol_upper} exists but is not a USDT pair (quote: {quote_asset})"
-                    
-                    # Symbol is valid and tradable
-                    logger.info(f"Symbol {symbol_upper} validated: tradable SPOT USDT pair")
+                    logger.info(f"Symbol {symbol_upper} validated: tradable {symbol_type} pair (quote: {quote_asset})")
                     return True, None
             
-            # Symbol not found - get suggestions
+            # Symbol not found - get suggestions from all tradable symbols
             all_symbols = [s.get('symbol', '') for s in exchange_info.get('symbols', []) 
-                          if s.get('quoteAsset') == 'USDT' and s.get('symbol')]
+                          if s.get('status') == 'TRADING' and s.get('symbol')]
             similar = [s for s in all_symbols if symbol_upper in s or s.startswith(symbol_upper[:3])][:5]
             
             error_msg = f"Symbol {symbol_upper} not found on Binance"
             if similar:
                 error_msg += f". Did you mean: {', '.join(similar)}?"
             else:
-                # Get some popular examples
-                popular = [s for s in all_symbols if s in ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT']]
+                # Get some popular examples (including different quote assets)
+                popular_symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 
+                                  'BTCBUSD', 'ETHBTC', 'BNBBTC']
+                popular = [s for s in all_symbols if s in popular_symbols]
                 if popular:
-                    error_msg += f". Popular symbols: {', '.join(popular)}"
+                    error_msg += f". Popular symbols: {', '.join(popular[:5])}"
             
             return False, error_msg
         

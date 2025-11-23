@@ -103,7 +103,7 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "get_tradable_symbols",
-                    "description": "Get all tradable cryptocurrency symbols (USDT pairs) available on Binance. Use this to check which coins/pairs are available for trading, including major cryptos, altcoins, and meme coins.",
+                    "description": "Get all tradable cryptocurrency symbols available on Binance (all trading types: SPOT, MARGIN, FUTURES, etc., and all quote assets: USDT, BUSD, BTC, ETH, BNB, etc.). Use this to check which coins/pairs are available for trading, including major cryptos, altcoins, and meme coins.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -405,14 +405,20 @@ class AgentTools:
                         symbols = temp_client.get_tradable_symbols()
                         search = parameters.get("search", "").upper()
                         if search:
-                            symbols = [s for s in symbols if search in s['symbol'] or search in s['baseAsset']]
+                            symbols = [s for s in symbols if search in s.get('symbol', '') or 
+                                      search in s.get('baseAsset', '') or 
+                                      search in s.get('quoteAsset', '') or
+                                      search in s.get('type', '')]
                         return {"success": True, "count": len(symbols), "symbols": symbols}
                     except Exception as e:
                         return {"error": f"Binance client not available: {str(e)}", "success": False}
                 search = parameters.get("search", "").upper()
                 symbols = self.binance_client.get_tradable_symbols()
                 if search:
-                    symbols = [s for s in symbols if search in s['symbol'] or search in s['baseAsset']]
+                    symbols = [s for s in symbols if search in s.get('symbol', '') or 
+                              search in s.get('baseAsset', '') or 
+                              search in s.get('quoteAsset', '') or
+                              search in s.get('type', '')]
                 return {"success": True, "count": len(symbols), "symbols": symbols}
             
             elif tool_name == "validate_symbol":
