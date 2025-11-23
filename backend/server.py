@@ -671,6 +671,12 @@ async def startup_event():
     logger.info("Project CypherTrade started successfully")
 
 # Include the router in the main app
+# Health check endpoint (before API router to avoid prefix)
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
 app.include_router(api_router)
 
 # Global exception handlers (MUST be after router inclusion)
