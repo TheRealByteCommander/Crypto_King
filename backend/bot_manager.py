@@ -253,11 +253,10 @@ class TradingBot:
         try:
             # Ensure binance_client is available
             if self.binance_client is None:
-                if not self.is_running:
-                    # If bot is not running, create binance client
-                    self.binance_client = BinanceClientWrapper()
-                else:
-                    return {"success": False, "message": "Binance client not available"}
+                logger.warning(f"Binance client is None, creating new client (bot.is_running={self.is_running})")
+                # Always create binance client if it's None, regardless of bot status
+                # This allows manual trades even if the bot loop hasn't started yet
+                self.binance_client = BinanceClientWrapper()
             
             # Get current price
             current_price = self.binance_client.get_current_price(symbol)

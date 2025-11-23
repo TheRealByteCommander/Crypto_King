@@ -431,11 +431,14 @@ class AgentManager:
             if trade_side and trade_symbol and bot is not None:
                 try:
                     # Ensure binance_client is available
-                    if bot.binance_client is None and not bot.is_running:
+                    # If bot is running, binance_client should exist, but check anyway
+                    if bot.binance_client is None:
                         from binance_client import BinanceClientWrapper
+                        logger.warning(f"Bot binance_client is None, creating new client (bot.is_running={bot.is_running})")
                         bot.binance_client = BinanceClientWrapper()
                     
                     if bot.binance_client is not None:
+                        logger.info(f"Executing manual trade: {trade_side} {trade_quantity or trade_amount or 'all'} {trade_symbol}")
                         # Execute the trade
                         trade_result = await bot.execute_manual_trade(
                             symbol=trade_symbol,
@@ -444,43 +447,58 @@ class AgentManager:
                             amount_usdt=trade_amount
                         )
                         
+                        logger.info(f"Trade result: success={trade_result.get('success')}, message={trade_result.get('message')}")
+                        
                         if trade_result.get("success"):
+                            order = trade_result.get("order", {})
+                            order_id = order.get("orderId") if order else None
+                            executed_quantity = trade_result.get('quantity', trade_quantity or 'all')
+                            price = trade_result.get('price', 'N/A')
+                            
                             context_parts.append(f"\n[TRADE AUSGEFÜHRT]")
-                            context_parts.append(f"- Order: {trade_side} {trade_result.get('quantity', trade_quantity or 'all')} {trade_symbol}")
-                            context_parts.append(f"- Preis: {trade_result.get('price', 'N/A')} USDT")
-                            context_parts.append(f"- Order ID: {trade_result.get('order', {}).get('orderId', 'N/A')}")
+                            context_parts.append(f"- Order: {trade_side} {executed_quantity} {trade_symbol}")
+                            context_parts.append(f"- Preis: {price} USDT")
+                            if order_id:
+                                context_parts.append(f"- Order ID: {order_id}")
+                            else:
+                                context_parts.append(f"- Order ID: Nicht verfügbar")
                             context_parts.append(f"- Status: Erfolgreich ausgeführt")
                             
                             await self.log_agent_message(
                                 "CypherTrade",
-                                f"Manual trade executed via NexusChat: {trade_side} {trade_result.get('quantity', trade_quantity)} {trade_symbol} at {trade_result.get('price')} USDT",
+                                f"Manual trade executed via NexusChat: {trade_side} {executed_quantity} {trade_symbol} at {price} USDT (Order ID: {order_id or 'N/A'})",
                                 "trade"
                             )
                             
-                            logger.info(f"Trade executed successfully: {trade_side} {trade_result.get('quantity')} {trade_symbol}")
+                            logger.info(f"Trade executed successfully: {trade_side} {executed_quantity} {trade_symbol} (Order ID: {order_id})")
                         else:
+                            error_message = trade_result.get('message', 'Unbekannter Fehler')
                             context_parts.append(f"\n[TRADE FEHLGESCHLAGEN]")
-                            context_parts.append(f"- Fehler: {trade_result.get('message', 'Unbekannter Fehler')}")
+                            context_parts.append(f"- Fehler: {error_message}")
+                            context_parts.append(f"- Der Trade konnte nicht ausgeführt werden.")
                             context_parts.append(f"- Bitte versuche es erneut oder kontaktiere den Support.")
                             
                             await self.log_agent_message(
                                 "CypherTrade",
-                                f"Manual trade failed: {trade_result.get('message', 'Unknown error')}",
+                                f"Manual trade failed: {error_message}",
                                 "error"
                             )
-                            logger.error(f"Trade execution failed: {trade_result.get('message')}")
+                            logger.error(f"Trade execution failed: {error_message}")
                     else:
+                        error_msg = "Binance Client nicht verfügbar. Bitte starte den Bot zuerst."
                         context_parts.append(f"\n[TRADE FEHLER]")
-                        context_parts.append(f"- Binance Client nicht verfügbar. Bitte starte den Bot zuerst.")
+                        context_parts.append(f"- {error_msg}")
+                        logger.error(error_msg)
                 except Exception as e:
+                    error_str = str(e)
                     logger.error(f"Error executing trade from chat: {e}", exc_info=True)
                     context_parts.append(f"\n[TRADE FEHLER]")
-                    context_parts.append(f"- Fehler beim Ausführen des Trades: {str(e)}")
+                    context_parts.append(f"- Fehler beim Ausführen des Trades: {error_str}")
                     context_parts.append(f"- Der Trade konnte nicht ausgeführt werden.")
                     
                     await self.log_agent_message(
                         "CypherTrade",
-                        f"Error executing manual trade: {str(e)}",
+                        f"Error executing manual trade: {error_str}",
                         "error"
                     )
             
