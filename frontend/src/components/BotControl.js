@@ -192,7 +192,8 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
         </div>
         
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* Erste Zeile: Strategy, Symbol, Timeframe */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <Label htmlFor="strategy" className="text-slate-300 mb-2 block">Strategy</Label>
               <Select value={strategy} onValueChange={setStrategy}>
@@ -239,12 +240,17 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
+          {/* Zweite Zeile: Trading Mode, Amount */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="trading-mode" className="text-slate-300 mb-2 block">Trading Mode</Label>
+              <Label htmlFor="trading-mode" className="text-slate-300 mb-2 block">
+                Trading Mode <span className="text-xs text-slate-500">(SPOT/MARGIN/FUTURES)</span>
+              </Label>
               <Select value={tradingMode} onValueChange={setTradingMode}>
                 <SelectTrigger className="bg-slate-800/50 border-indigo-500/30" data-testid="trading-mode-select">
-                  <SelectValue />
+                  <SelectValue placeholder="Wähle Trading Mode" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="SPOT">SPOT (Long Only)</SelectItem>
