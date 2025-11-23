@@ -573,25 +573,40 @@ async def get_volatile_assets(limit: int = 20):
     """Get the most volatile assets (30-day analysis) for NexusChat dashboard."""
     try:
         # Create a temporary Binance client if bot is not running
-        if bot.binance_client is None:
+        binance_client = bot.binance_client
+        if binance_client is None:
             from binance_client import BinanceClientWrapper
-            temp_client = BinanceClientWrapper()
+            binance_client = BinanceClientWrapper()
+        
+        # Try 30-day analysis with timeout (max 30 seconds)
+        tickers = []
+        try:
+            logger.info("Starting 30-day volatile assets analysis...")
+            # Run in executor with timeout
+            tickers = await asyncio.wait_for(
+                asyncio.to_thread(binance_client.get_30d_volatile_assets),
+                timeout=30.0
+            )
+            logger.info(f"30-day analysis completed: {len(tickers)} assets found")
+        except asyncio.TimeoutError:
+            logger.warning("30-day analysis timed out after 30 seconds, falling back to 24h")
+            tickers = binance_client.get_24h_ticker_stats()
+        except Exception as e:
+            logger.warning(f"30-day analysis failed: {e}, falling back to 24h")
+            # Fallback to 24h if 30-day fails
             try:
-                tickers = temp_client.get_30d_volatile_assets()
-            except Exception as e:
-                logger.warning(f"30-day analysis failed, falling back to 24h: {e}")
-                # Fallback to 24h if 30-day fails
-                tickers = temp_client.get_24h_ticker_stats()
-        else:
-            try:
-                tickers = bot.binance_client.get_30d_volatile_assets()
-            except Exception as e:
-                logger.warning(f"30-day analysis failed, falling back to 24h: {e}")
-                # Fallback to 24h if 30-day fails
-                tickers = bot.binance_client.get_24h_ticker_stats()
+                tickers = binance_client.get_24h_ticker_stats()
+            except Exception as fallback_error:
+                logger.error(f"24h fallback also failed: {fallback_error}")
+                return {
+                    "success": False,
+                    "error": f"Both 30-day and 24h analysis failed: {str(e)}",
+                    "assets": [],
+                    "count": 0
+                }
         
         # Limit results
-        limited_tickers = tickers[:limit]
+        limited_tickers = tickers[:limit] if tickers else []
         
         # Convert to response format
         result = {
