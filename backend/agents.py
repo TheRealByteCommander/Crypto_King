@@ -221,7 +221,8 @@ class AgentManager:
             context_parts = []
             
             # Add bot status if available
-            if bot:
+            # Use explicit None check - database objects cannot be used as boolean
+            if bot is not None:
                 try:
                     bot_status = await bot.get_status()
                     if bot_status.get("is_running"):
@@ -237,7 +238,7 @@ class AgentManager:
                         context_parts.append(f"- Betrag: ${amount}")
                         
                         # Get current price if bot is running and has binance_client
-                        if bot.binance_client and symbol and symbol != "N/A":
+                        if bot.binance_client is not None and symbol and symbol != "N/A":
                             try:
                                 current_price = bot.binance_client.get_current_price(symbol)
                                 context_parts.append(f"- Aktueller Kurs für {symbol}: {current_price} USDT")
@@ -256,7 +257,8 @@ class AgentManager:
                     logger.warning(f"Could not get bot status for context: {e}")
             
             # Add recent trade history if available
-            if db:
+            # Use explicit None check - database objects cannot be used as boolean
+            if db is not None:
                 try:
                     recent_trades = await db.trades.find({}, {"_id": 0}).sort("timestamp", -1).limit(5).to_list(5)
                     if recent_trades:
