@@ -578,19 +578,25 @@ async def get_volatile_assets(limit: int = 20):
             from binance_client import BinanceClientWrapper
             binance_client = BinanceClientWrapper()
         
-        # Try 24h first (faster and more reliable), then optionally upgrade to 30-day
+        # Get 30-day volatile assets with timeout
         tickers = []
         try:
-            logger.info("Getting volatile assets (24h ticker stats)...")
-            # Use 24h ticker stats for now (faster, more reliable)
-            # TODO: Can be upgraded to 30-day analysis in the future if needed
-            tickers = binance_client.get_24h_ticker_stats()
-            logger.info(f"24h ticker stats retrieved: {len(tickers)} assets found")
-            
-            # Optional: Try to enhance with 30-day data for top assets (async, non-blocking)
-            # This can be done in background if needed
+            logger.info("Getting 30-day volatile assets...")
+            # Run 30-day analysis in thread pool with timeout
+            try:
+                tickers = await asyncio.wait_for(
+                    asyncio.to_thread(binance_client.get_30d_volatile_assets),
+                    timeout=20.0  # 20 seconds timeout
+                )
+                logger.info(f"30-day analysis completed: {len(tickers)} assets found")
+            except asyncio.TimeoutError:
+                logger.warning("30-day analysis timed out, using 24h ticker stats as fallback")
+                tickers = binance_client.get_24h_ticker_stats()
+            except Exception as analysis_error:
+                logger.warning(f"30-day analysis failed: {analysis_error}, using 24h ticker stats as fallback")
+                tickers = binance_client.get_24h_ticker_stats()
         except Exception as e:
-            logger.error(f"Failed to get 24h ticker stats: {e}", exc_info=True)
+            logger.error(f"Failed to get volatile assets: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
