@@ -3,7 +3,7 @@ from binance.exceptions import BinanceAPIException
 from config import settings
 import pandas as pd
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class BinanceClientWrapper:
             logger.error(f"Error getting tradable symbols: {e}")
             return []
     
-    def is_symbol_tradable(self, symbol: str) -> tuple[bool, Optional[str]]:
+    def is_symbol_tradable(self, symbol: str) -> Tuple[bool, Optional[str]]:
         """
         Check if a symbol is tradable on Binance.
         Returns: (is_tradable: bool, error_message: Optional[str])
