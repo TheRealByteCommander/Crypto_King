@@ -23,6 +23,12 @@ DEFAULT_BOLLINGER_STD_DEV = 2
 MIN_PROFIT_LOSS_THRESHOLD = 2.0  # $2 minimum loss to consider as failure
 QUANTITY_DECIMAL_PLACES = 6
 
+# Binance Trading Fees
+BINANCE_TAKER_FEE = 0.001  # 0.1% fee for market orders (taker)
+BINANCE_MAKER_FEE = 0.001  # 0.1% fee for limit orders (maker, if not immediately filled)
+TOTAL_TRADE_FEE = 0.002  # 0.2% total fee for complete trade (buy + sell)
+MIN_PROFIT_AFTER_FEES = 0.003  # 0.3% minimum profit after fees required for a trade
+
 # Memory Constants
 MAX_SHORT_TERM_MEMORY = 50
 DEFAULT_MEMORY_RETRIEVAL_LIMIT = 20
