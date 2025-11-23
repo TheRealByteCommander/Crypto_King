@@ -1,134 +1,100 @@
 #!/bin/bash
-# Behebt Frontend spawn error
-
-set -e
+# Behebt Frontend Spawn Error - Prüft Logs und startet Frontend korrekt
 
 echo "=== Frontend Spawn Error beheben ==="
 echo ""
 
-# 1. Prüfe Frontend Error Logs
-echo "[INFO] Prüfe Frontend Error Logs:"
-if [ -f "/var/log/supervisor/cyphertrade-frontend-error.log" ]; then
-    echo "--- Letzte 30 Zeilen der Error Logs ---"
-    tail -30 /var/log/supervisor/cyphertrade-frontend-error.log
-else
-    echo "  Error-Log-Datei nicht gefunden"
-fi
+# 1. Prüfe Error Logs
+echo "[INFO] Prüfe Frontend Error Logs (letzte 50 Zeilen):"
+tail -50 /var/log/supervisor/cyphertrade-frontend-error.log 2>/dev/null || echo "[WARNING] Error-Log-Datei nicht gefunden"
+
+echo ""
+echo "[INFO] Prüfe Frontend Logs (letzte 50 Zeilen):"
+tail -50 /var/log/supervisor/cyphertrade-frontend.log 2>/dev/null || echo "[WARNING] Log-Datei nicht gefunden"
+
 echo ""
 
-# 2. Prüfe Frontend Logs
-echo "[INFO] Prüfe Frontend Logs:"
-if [ -f "/var/log/supervisor/cyphertrade-frontend.log" ]; then
-    echo "--- Letzte 30 Zeilen der Logs ---"
-    tail -30 /var/log/supervisor/cyphertrade-frontend.log
-else
-    echo "  Log-Datei nicht gefunden"
-fi
-echo ""
+# 2. Stoppe Frontend sicher
+echo "[INFO] Stoppe Frontend..."
+sudo supervisorctl stop cyphertrade-frontend 2>/dev/null || true
+pkill -f "yarn start" 2>/dev/null || true
+pkill -f "craco start" 2>/dev/null || true
+pkill -f "react-scripts" 2>/dev/null || true
+sleep 2
 
-# 3. Prüfe ob Yarn verfügbar ist
-echo "[INFO] Prüfe Yarn Installation:"
-if command -v yarn > /dev/null 2>&1; then
-    YARN_VERSION=$(yarn --version 2>&1)
-    echo "[SUCCESS] Yarn installiert (Version: $YARN_VERSION)"
-else
-    echo "[ERROR] Yarn nicht gefunden!"
-    exit 1
+# 3. Prüfe Port 3000
+echo "[INFO] Prüfe Port 3000..."
+if lsof -i :3000 &>/dev/null; then
+    echo "[WARNING] Port 3000 noch belegt, beende Prozess..."
+    lsof -ti :3000 | xargs kill -9 2>/dev/null || true
+    sleep 2
 fi
-echo ""
 
-# 4. Prüfe ob Node.js verfügbar ist
-echo "[INFO] Prüfe Node.js Installation:"
-if command -v node > /dev/null 2>&1; then
-    NODE_VERSION=$(node --version 2>&1)
-    echo "[SUCCESS] Node.js installiert (Version: $NODE_VERSION)"
-else
-    echo "[ERROR] Node.js nicht gefunden!"
-    exit 1
-fi
-echo ""
-
-# 5. Prüfe Frontend Verzeichnis
-echo "[INFO] Prüfe Frontend Verzeichnis:"
+# 4. Prüfe Frontend-Verzeichnis und Dependencies
+echo "[INFO] Prüfe Frontend-Verzeichnis..."
 cd /app/frontend || { echo "[ERROR] Frontend-Verzeichnis nicht gefunden!"; exit 1; }
 
-if [ ! -f "package.json" ]; then
-    echo "[ERROR] package.json nicht gefunden!"
-    exit 1
-fi
-
-# 6. Installiere Dependencies falls nötig
+echo "[INFO] Prüfe node_modules..."
 if [ ! -d "node_modules" ]; then
-    echo "[INFO] Installiere Frontend Dependencies..."
-    yarn install --frozen-lockfile || yarn install
-else
-    echo "[SUCCESS] node_modules vorhanden"
+    echo "[WARNING] node_modules nicht gefunden, installiere Dependencies..."
+    yarn install
 fi
 
-# 7. Prüfe .env Datei
-echo "[INFO] Prüfe .env Datei:"
+# 5. Prüfe .env Datei
+echo "[INFO] Prüfe .env Datei..."
 if [ ! -f ".env" ]; then
     echo "[WARNING] .env nicht gefunden, erstelle sie..."
     cat > .env << 'ENVEOF'
 REACT_APP_BACKEND_URL=http://192.168.178.154:8001
 GENERATE_SOURCEMAP=false
+DISABLE_HOT_RELOAD=true
+FAST_REFRESH=false
 ENVEOF
-else
-    echo "[SUCCESS] .env vorhanden"
-    # Stelle sicher, dass REACT_APP_BACKEND_URL gesetzt ist
-    if ! grep -q "^REACT_APP_BACKEND_URL" .env; then
-        echo "[INFO] Füge REACT_APP_BACKEND_URL hinzu..."
-        echo "REACT_APP_BACKEND_URL=http://192.168.178.154:8001" >> .env
-    fi
 fi
 
-# 8. Teste ob yarn start funktioniert (kurz)
-echo "[INFO] Teste yarn start (timeout 10 Sekunden)..."
-timeout 10 yarn start || echo "[INFO] yarn start gestartet (normal nach timeout)"
+# 6. Teste yarn start direkt (mit Timeout)
+echo "[INFO] Teste 'yarn start' direkt (10 Sekunden timeout)..."
+timeout 10 yarn start 2>&1 | head -20 || echo "[INFO] yarn start beendet (normal nach Timeout)"
 
-# 9. Aktualisiere Supervisor Config mit absolutem Pfad
-echo "[INFO] Aktualisiere Supervisor Config mit absolutem Yarn-Pfad..."
-YARN_PATH=$(which yarn)
-echo "[INFO] Yarn gefunden bei: $YARN_PATH"
-
-sudo tee /etc/supervisor/conf.d/cyphertrade-frontend.conf > /dev/null << EOF
-[program:cyphertrade-frontend]
-directory=/app/frontend
-command=$YARN_PATH start
-user=root
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/supervisor/cyphertrade-frontend-error.log
-stdout_logfile=/var/log/supervisor/cyphertrade-frontend.log
-environment=REACT_APP_BACKEND_URL="http://192.168.178.154:8001",NODE_ENV="development",GENERATE_SOURCEMAP="false",PATH="$(echo $PATH)"
-stopwaitsecs=10
-killasgroup=true
-priority=998
-EOF
-
-echo "[SUCCESS] Supervisor Config aktualisiert"
-
-# 10. Reload Supervisor
-echo "[INFO] Lade Supervisor neu..."
-sudo supervisorctl reread
-sudo supervisorctl update
-
-# 11. Starte Frontend
-echo "[INFO] Starte Frontend..."
-sleep 3
-sudo supervisorctl start cyphertrade-frontend
-
-# 12. Prüfe Status
 echo ""
-echo "[INFO] Frontend Status:"
-sleep 2
-sudo supervisorctl status cyphertrade-frontend
+
+# 7. Prüfe Supervisor Config
+echo "[INFO] Prüfe Supervisor Config..."
+if [ -f "/etc/supervisor/conf.d/cyphertrade-frontend.conf" ]; then
+    echo "[SUCCESS] Supervisor Config vorhanden"
+    cat /etc/supervisor/conf.d/cyphertrade-frontend.conf
+else
+    echo "[ERROR] Supervisor Config nicht gefunden!"
+    exit 1
+fi
+
+echo ""
+
+# 8. Versuche Frontend manuell zu starten (ohne Supervisor)
+echo "[INFO] Versuche Frontend manuell zu starten (im Hintergrund)..."
+cd /app/frontend
+export REACT_APP_BACKEND_URL="http://192.168.178.154:8001"
+export NODE_ENV="development"
+nohup yarn start > /var/log/supervisor/cyphertrade-frontend-manual.log 2>&1 &
+MANUAL_PID=$!
+echo "[INFO] Frontend manuell gestartet (PID: $MANUAL_PID)"
+
+sleep 5
+
+# 9. Prüfe ob Frontend läuft
+echo "[INFO] Prüfe ob Frontend läuft..."
+if ps -p $MANUAL_PID > /dev/null; then
+    echo "[SUCCESS] Frontend läuft (PID: $MANUAL_PID)"
+    echo "[INFO] Logs: tail -f /var/log/supervisor/cyphertrade-frontend-manual.log"
+else
+    echo "[ERROR] Frontend startete nicht erfolgreich"
+    echo "[INFO] Prüfe Logs: cat /var/log/supervisor/cyphertrade-frontend-manual.log"
+    cat /var/log/supervisor/cyphertrade-frontend-manual.log 2>/dev/null || echo "Keine Logs verfügbar"
+fi
 
 echo ""
 echo "=== Zusammenfassung ==="
-echo ""
-echo "Falls Frontend immer noch nicht startet:"
-echo "  tail -50 /var/log/supervisor/cyphertrade-frontend-error.log"
-echo "  tail -50 /var/log/supervisor/cyphertrade-frontend.log"
-echo ""
-
+echo "Falls das Frontend noch nicht läuft, prüfe bitte die Logs:"
+echo "  - tail -100 /var/log/supervisor/cyphertrade-frontend-error.log"
+echo "  - tail -100 /var/log/supervisor/cyphertrade-frontend.log"
+echo "  - tail -100 /var/log/supervisor/cyphertrade-frontend-manual.log"
