@@ -322,6 +322,15 @@ class TradingBot:
             # Adjust quantity to match Binance LOT_SIZE filter requirements
             quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
             
+            # Adjust quantity to meet MIN_NOTIONAL filter requirements
+            adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+            if adjusted_quantity is None:
+                return {
+                    "success": False,
+                    "message": f"Order value too small. Minimum notional value not met for {symbol}. Please increase quantity or amount."
+                }
+            quantity = adjusted_quantity
+            
             if quantity <= 0:
                 return {"success": False, "message": f"Insufficient balance for {side} order"}
             
