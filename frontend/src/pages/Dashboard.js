@@ -12,7 +12,8 @@ import {
   RefreshCw,
   BarChart3,
   MessageSquare,
-  Settings
+  Settings,
+  Wallet
 } from "lucide-react";
 import BotControl from "../components/BotControl";
 import PerformanceChart from "../components/PerformanceChart";
@@ -24,6 +25,7 @@ import LearningInsights from "../components/LearningInsights";
 import MobileNavigation from "../components/MobileNavigation";
 import NexusChat from "../components/NexusChat";
 import VolatileAssets from "../components/VolatileAssets";
+import Portfolio from "../components/Portfolio";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -309,6 +311,18 @@ const Dashboard = () => {
                 NexusChat
               </button>
               <button
+                onClick={() => setActiveTab("portfolio")}
+                className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
+                  activeTab === "portfolio"
+                    ? "text-indigo-400 border-b-2 border-indigo-400"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+                data-testid="portfolio-tab"
+              >
+                <Wallet className="w-4 h-4 inline mr-2" />
+                Portfolio
+              </button>
+              <button
                 onClick={() => setActiveTab("learning")}
                 className={`pb-4 px-4 font-medium transition-colors whitespace-nowrap touch-manipulation ${
                   activeTab === "learning"
@@ -332,6 +346,7 @@ const Dashboard = () => {
             )}
             {activeTab === "trades" && <TradeHistory />}
             {activeTab === "logs" && <AgentLogs />}
+            {activeTab === "portfolio" && <Portfolio />}
             {activeTab === "chat" && (
               <div className="h-[600px]">
                 <NexusChat />

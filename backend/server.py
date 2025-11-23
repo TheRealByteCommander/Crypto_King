@@ -531,6 +531,137 @@ async def get_analyses(limit: int = 50):
         logger.error(f"Error getting analyses: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/portfolio")
+async def get_portfolio():
+    """Get current portfolio overview with all assets held."""
+    try:
+        from binance_client import BinanceClientWrapper
+        from collections import defaultdict
+        
+        binance_client = BinanceClientWrapper()
+        portfolio_assets = defaultdict(lambda: {
+            "quantity": 0.0,
+            "value_usdt": 0.0,
+            "entry_price": 0.0,
+            "current_price": 0.0,
+            "unrealized_pnl": 0.0,
+            "unrealized_pnl_percent": 0.0,
+            "bots": []
+        })
+        
+        # Get all running bots
+        all_bots = bot_manager.get_all_bots()
+        
+        for bot_id, bot in all_bots.items():
+            if not bot.is_running or not bot.current_config:
+                continue
+            
+            symbol = bot.current_config.get("symbol")
+            trading_mode = bot.current_config.get("trading_mode", "SPOT")
+            
+            if not symbol:
+                continue
+            
+            # Extract base asset from symbol (e.g., BTCUSDT -> BTC)
+            base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+            
+            try:
+                # Get current balance for this asset
+                balance = binance_client.get_account_balance(base_asset, trading_mode)
+                
+                if balance > 0.000001:  # Only include meaningful balances
+                    # Get current price
+                    current_price = binance_client.get_current_price(symbol)
+                    
+                    # Get entry price from bot's position tracking or last trade
+                    entry_price = bot.position_entry_price if bot.position_entry_price > 0 else current_price
+                    
+                    # Calculate values
+                    value_usdt = balance * current_price
+                    unrealized_pnl = (current_price - entry_price) * balance if entry_price > 0 else 0.0
+                    unrealized_pnl_percent = ((current_price - entry_price) / entry_price * 100) if entry_price > 0 else 0.0
+                    
+                    # Aggregate across all bots for same asset
+                    portfolio_assets[base_asset]["quantity"] += balance
+                    portfolio_assets[base_asset]["value_usdt"] += value_usdt
+                    portfolio_assets[base_asset]["current_price"] = current_price
+                    portfolio_assets[base_asset]["unrealized_pnl"] += unrealized_pnl
+                    portfolio_assets[base_asset]["bots"].append({
+                        "bot_id": bot_id,
+                        "symbol": symbol,
+                        "quantity": balance,
+                        "trading_mode": trading_mode,
+                        "position": bot.position,
+                        "entry_price": entry_price
+                    })
+                    
+                    # Update entry price (weighted average if multiple bots)
+                    if entry_price > 0:
+                        total_value = portfolio_assets[base_asset]["value_usdt"]
+                        if total_value > 0:
+                            portfolio_assets[base_asset]["entry_price"] = (
+                                portfolio_assets[base_asset]["entry_price"] * (total_value - value_usdt) + 
+                                entry_price * value_usdt
+                            ) / total_value if portfolio_assets[base_asset]["entry_price"] > 0 else entry_price
+                    
+            except Exception as e:
+                logger.warning(f"Error getting portfolio asset {base_asset} for bot {bot_id}: {e}")
+                continue
+        
+        # Convert to list and calculate PnL percentage
+        portfolio_list = []
+        total_portfolio_value = 0.0
+        
+        for asset, data in portfolio_assets.items():
+            if data["quantity"] > 0:
+                # Recalculate PnL percentage with weighted entry price
+                if data["entry_price"] > 0:
+                    data["unrealized_pnl_percent"] = ((data["current_price"] - data["entry_price"]) / data["entry_price"] * 100)
+                
+                portfolio_list.append({
+                    "asset": asset,
+                    "quantity": round(data["quantity"], 8),
+                    "value_usdt": round(data["value_usdt"], 2),
+                    "entry_price": round(data["entry_price"], 6),
+                    "current_price": round(data["current_price"], 6),
+                    "unrealized_pnl": round(data["unrealized_pnl"], 2),
+                    "unrealized_pnl_percent": round(data["unrealized_pnl_percent"], 2),
+                    "bots": data["bots"]
+                })
+                total_portfolio_value += data["value_usdt"]
+        
+        # Sort by value (descending)
+        portfolio_list.sort(key=lambda x: x["value_usdt"], reverse=True)
+        
+        # Also get USDT balance
+        try:
+            usdt_balance = binance_client.get_account_balance("USDT", "SPOT")
+            total_portfolio_value += usdt_balance
+        except Exception as e:
+            logger.warning(f"Error getting USDT balance: {e}")
+            usdt_balance = 0.0
+        
+        return {
+            "success": True,
+            "assets": portfolio_list,
+            "usdt_balance": round(usdt_balance, 2),
+            "total_portfolio_value": round(total_portfolio_value, 2),
+            "total_unrealized_pnl": round(sum(a["unrealized_pnl"] for a in portfolio_list), 2),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting portfolio: {e}", exc_info=True)
+        return {
+            "success": False,
+            "assets": [],
+            "usdt_balance": 0.0,
+            "total_portfolio_value": 0.0,
+            "total_unrealized_pnl": 0.0,
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
 @api_router.get("/stats")
 async def get_statistics():
     """Get overall statistics with learning insights."""
