@@ -171,6 +171,10 @@ class BinanceClientWrapper:
                 )
             elif trading_mode == "MARGIN":
                 # Margin trading - allows short positions
+                # WARNUNG: Funktioniert NICHT auf Testnet!
+                if settings.binance_testnet:
+                    raise ValueError("MARGIN Trading wird auf Binance Testnet nicht unterstützt. Testnet unterstützt nur SPOT Trading.")
+                
                 order = self.client.create_margin_order(
                     symbol=symbol,
                     side=side,
@@ -179,6 +183,10 @@ class BinanceClientWrapper:
                 )
             elif trading_mode == "FUTURES":
                 # Futures trading - supports both long and short positions
+                # WARNUNG: Funktioniert NICHT auf Testnet!
+                if settings.binance_testnet:
+                    raise ValueError("FUTURES Trading wird auf Binance Testnet nicht unterstützt. Testnet unterstützt nur SPOT Trading.")
+                
                 # For futures, we need to specify position side: 'LONG' or 'SHORT'
                 position_side = "LONG" if side == "BUY" else "SHORT"
                 

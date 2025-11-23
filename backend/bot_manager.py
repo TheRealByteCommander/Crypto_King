@@ -64,6 +64,13 @@ class TradingBot:
                     "message": f"Invalid trading mode '{trading_mode}'. Valid modes: {', '.join(valid_modes)}"
                 }
             
+            # WARNUNG: Binance Testnet unterstützt NUR Spot Trading!
+            if settings.binance_testnet and trading_mode_upper in ["MARGIN", "FUTURES"]:
+                return {
+                    "success": False,
+                    "message": f"⚠️ MARGIN und FUTURES Trading funktionieren NICHT auf Binance Testnet! Testnet unterstützt nur SPOT Trading. Für MARGIN/FUTURES benötigst du einen Binance Mainnet Account mit BINANCE_TESTNET=false"
+                }
+            
             # Validate symbol before starting
             symbol_upper = symbol.upper()
             is_tradable, error_msg = self.binance_client.is_symbol_tradable(symbol_upper)
