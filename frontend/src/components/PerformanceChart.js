@@ -62,7 +62,7 @@ const PerformanceChart = () => {
   }
 
   return (
-    <div className="h-80" data-testid="performance-chart">
+    <div className="w-full" style={{ minHeight: '320px', height: '320px' }} data-testid="performance-chart">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 102, 241, 0.1)" />
