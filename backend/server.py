@@ -75,8 +75,14 @@ app.add_middleware(
 api_router = APIRouter(prefix="/api")
 
 # Initialize agents and bot
-agent_manager = AgentManager(db)
+# Initialize agent_manager first, then bot (which will get agent_manager)
+# We'll update agent_manager with bot and binance_client after bot is created
+agent_manager = AgentManager(db, bot=None, binance_client=None)
 bot = get_bot_instance(db, agent_manager)
+# Update agent_manager with bot reference (binance_client will be available when bot starts)
+agent_manager.bot = bot
+# binance_client will be set when bot starts, but we can prepare the reference
+# agent_manager.binance_client = bot.binance_client  # Will be set when bot starts
 
 # Initialize MCP Server if enabled
 mcp_server = create_mcp_server(db, agent_manager, bot)

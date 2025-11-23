@@ -7,19 +7,24 @@ import json
 import yaml
 from pathlib import Path
 from memory_manager import MemoryManager
+from agent_tools import AgentTools
 
 logger = logging.getLogger(__name__)
 
 class AgentManager:
     """Manages the three specialized Autogen agents for crypto trading."""
     
-    def __init__(self, db):
+    def __init__(self, db, bot=None, binance_client=None):
         self.db = db
+        self.bot = bot
+        self.binance_client = binance_client
         self.agents = {}
         self.agent_configs = {}
         self.current_position = None
         self.capital = settings.default_amount
         self.memory_manager = MemoryManager(db)
+        # Initialize agent tools
+        self.agent_tools = AgentTools(bot=bot, binance_client=binance_client, db=db)
         self.load_agent_configs()
         self.initialize_agents()
     
@@ -50,25 +55,31 @@ class AgentManager:
                 }
     
     def _get_llm_config(self, agent_type: str) -> Dict[str, Any]:
-        """Get LLM configuration for a specific agent (Ollama support)."""
+        """Get LLM configuration for a specific agent with tools (Ollama support)."""
         config = self.agent_configs.get(agent_type, {})
         
         if agent_type == "nexuschat":
             base_url = settings.nexuschat_base_url
             model = settings.nexuschat_model
             api_key = settings.ollama_api_key
+            # Get tools for NexusChat
+            functions = self.agent_tools.get_nexuschat_tools()
         elif agent_type == "cyphermind":
             base_url = settings.cyphermind_base_url
             model = settings.cyphermind_model
             api_key = settings.ollama_api_key
+            # Get tools for CypherMind (market data access)
+            functions = self.agent_tools.get_cyphermind_tools()
         elif agent_type == "cyphertrade":
             base_url = settings.cyphertrade_base_url
             model = settings.cyphertrade_model
             api_key = settings.ollama_api_key
+            # Get tools for CypherTrade (trade execution)
+            functions = self.agent_tools.get_cyphertrade_tools()
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
         
-        return {
+        llm_config = {
             "config_list": [{
                 "model": model,
                 "api_key": api_key,
@@ -77,6 +88,13 @@ class AgentManager:
             "temperature": config.get("temperature", 0.7),
             "timeout": config.get("timeout", 120),
         }
+        
+        # Add functions/tools if available (for models that support function calling)
+        # Note: Ollama may not support function calling in all models, but we provide it anyway
+        if functions:
+            llm_config["functions"] = functions
+        
+        return llm_config
     
     async def _enrich_system_message_with_memory(self, agent_name: str, base_message: str) -> str:
         """Enrich agent system message with memory/learning data."""
