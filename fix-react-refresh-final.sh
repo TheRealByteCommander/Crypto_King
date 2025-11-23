@@ -14,17 +14,23 @@ sudo supervisorctl stop cyphertrade-frontend 2>/dev/null || true
 echo "[INFO] Aktualisiere Frontend .env..."
 cd /app/frontend || { echo "[ERROR] Frontend-Verzeichnis nicht gefunden!"; exit 1; }
 
-# Füge DISABLE_HOT_RELOAD hinzu
+# Füge DISABLE_HOT_RELOAD und FAST_REFRESH hinzu
 if [ -f ".env" ]; then
-    # Entferne alte DISABLE_HOT_RELOAD Zeile falls vorhanden
+    # Entferne alte Zeilen falls vorhanden
     sed -i '/^DISABLE_HOT_RELOAD/d' .env
+    sed -i '/^FAST_REFRESH/d' .env
+    sed -i '/^WDS_SOCKET_HOST/d' .env
     # Füge neue hinzu
     echo "DISABLE_HOT_RELOAD=true" >> .env
+    echo "FAST_REFRESH=false" >> .env
+    echo "WDS_SOCKET_HOST=" >> .env
 else
     cat > .env << 'ENVEOF'
 REACT_APP_BACKEND_URL=http://192.168.178.154:8001
 GENERATE_SOURCEMAP=false
 DISABLE_HOT_RELOAD=true
+FAST_REFRESH=false
+WDS_SOCKET_HOST=
 ENVEOF
 fi
 
@@ -55,7 +61,7 @@ autostart=true
 autorestart=true
 stderr_logfile=/var/log/supervisor/cyphertrade-frontend-error.log
 stdout_logfile=/var/log/supervisor/cyphertrade-frontend.log
-environment=REACT_APP_BACKEND_URL="http://192.168.178.154:8001",NODE_ENV="development",GENERATE_SOURCEMAP="false",DISABLE_HOT_RELOAD="true",PATH="$(echo $PATH)"
+environment=REACT_APP_BACKEND_URL="http://192.168.178.154:8001",NODE_ENV="development",GENERATE_SOURCEMAP="false",DISABLE_HOT_RELOAD="true",FAST_REFRESH="false",WDS_SOCKET_HOST="",PATH="$(echo $PATH)"
 stopwaitsecs=10
 killasgroup=true
 priority=998
