@@ -235,8 +235,54 @@ class AgentManager:
             nexuschat = self.agents["nexuschat"]
             user_proxy = self.agents["user_proxy"]
             
+            # Check if user is asking for a price and automatically fetch it
+            user_lower = user_message.lower()
+            price_query = None
+            symbol_to_fetch = None
+            
+            # Common cryptocurrency symbols mapping
+            symbol_map = {
+                "bitcoin": "BTCUSDT",
+                "btc": "BTCUSDT",
+                "ethereum": "ETHUSDT",
+                "eth": "ETHUSDT",
+                "solana": "SOLUSDT",
+                "sol": "SOLUSDT",
+                "cardano": "ADAUSDT",
+                "ada": "ADAUSDT",
+                "polkadot": "DOTUSDT",
+                "dot": "DOTUSDT",
+                "chainlink": "LINKUSDT",
+                "link": "LINKUSDT",
+            }
+            
+            # Check if user is asking for a price
+            price_keywords = ["preis", "kostet", "kurs", "preis", "wie viel", "what", "price", "cost", "rate"]
+            for keyword in price_keywords:
+                if keyword in user_lower:
+                    # Find cryptocurrency name in message
+                    for crypto_name, symbol in symbol_map.items():
+                        if crypto_name in user_lower:
+                            symbol_to_fetch = symbol
+                            price_query = f"Der Benutzer fragt nach dem Preis für {crypto_name.upper()}. Hole den aktuellen Kurs mit get_current_price('{symbol}')."
+                            break
+                    break
+            
             # Build context message with real bot status and market data
             context_parts = []
+            
+            # If price query detected, fetch and include the price
+            if symbol_to_fetch and bot is not None and bot.binance_client is not None:
+                try:
+                    current_price = bot.binance_client.get_current_price(symbol_to_fetch)
+                    context_parts.append(f"\n[AKTUELLER KURS - {symbol_to_fetch}]")
+                    context_parts.append(f"- {symbol_to_fetch}: {current_price} USDT")
+                    context_parts.append(f"- Format: 1 {symbol_to_fetch.replace('USDT', '')} = {current_price} USDT")
+                    logger.info(f"Auto-fetched price for {symbol_to_fetch}: {current_price}")
+                except Exception as e:
+                    logger.warning(f"Could not auto-fetch price for {symbol_to_fetch}: {e}")
+                    context_parts.append(f"\n[WARNUNG]")
+                    context_parts.append(f"- Konnte Preis für {symbol_to_fetch} nicht abrufen: {str(e)}")
             
             # Add bot status if available
             # Use explicit None check - database objects cannot be used as boolean
