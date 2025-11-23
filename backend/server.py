@@ -427,17 +427,36 @@ async def get_bot_report():
         logger.error(f"Error getting report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/trades", response_model=List[Trade])
+@api_router.get("/trades")
 async def get_trades(limit: int = 100):  # Using default from constants would require refactoring
     """Get trade history."""
     try:
         trades = await db.trades.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
         # Convert ObjectIds to strings in case they exist in nested structures
-        cleaned_trades = [convert_objectid_to_str(trade) for trade in trades]
+        cleaned_trades = []
+        for trade in trades:
+            try:
+                # Clean the trade first
+                cleaned_trade = convert_objectid_to_str(trade)
+                # Ensure all required fields exist with defaults
+                cleaned_trade.setdefault("symbol", "")
+                cleaned_trade.setdefault("side", "")
+                cleaned_trade.setdefault("quantity", 0.0)
+                cleaned_trade.setdefault("order_id", "")
+                cleaned_trade.setdefault("status", "")
+                cleaned_trade.setdefault("executed_qty", 0.0)
+                cleaned_trade.setdefault("quote_qty", 0.0)
+                cleaned_trade.setdefault("timestamp", "")
+                cleaned_trades.append(cleaned_trade)
+            except Exception as trade_error:
+                logger.warning(f"Error processing trade: {trade_error}, trade data: {trade}")
+                continue
+        
         return cleaned_trades
     except Exception as e:
         logger.error(f"Error getting trades: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty list instead of raising exception to prevent 500 errors
+        return []
 
 @api_router.get("/logs", response_model=List[AgentLog])
 async def get_agent_logs(limit: int = 100):
