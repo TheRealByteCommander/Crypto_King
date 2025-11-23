@@ -547,6 +547,39 @@ async def get_pattern_insights(symbol: str, strategy: str):
         logger.error(f"Error getting pattern insights: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/market/volatile")
+async def get_volatile_assets(limit: int = 20):
+    """Get the most volatile assets (24h price change) for NexusChat dashboard."""
+    try:
+        # Create a temporary Binance client if bot is not running
+        if bot.binance_client is None:
+            from binance_client import BinanceClientWrapper
+            temp_client = BinanceClientWrapper()
+            tickers = temp_client.get_24h_ticker_stats()
+        else:
+            tickers = bot.binance_client.get_24h_ticker_stats()
+        
+        # Limit results
+        limited_tickers = tickers[:limit]
+        
+        # Convert to response format
+        result = {
+            "success": True,
+            "count": len(limited_tickers),
+            "assets": limited_tickers,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error getting volatile assets: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "assets": [],
+            "count": 0
+        }
+
 # WebSocket endpoint for real-time updates
 @api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

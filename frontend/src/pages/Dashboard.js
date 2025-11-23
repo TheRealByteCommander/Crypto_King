@@ -23,6 +23,7 @@ import AgentStatus from "../components/AgentStatus";
 import LearningInsights from "../components/LearningInsights";
 import MobileNavigation from "../components/MobileNavigation";
 import NexusChat from "../components/NexusChat";
+import VolatileAssets from "../components/VolatileAssets";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
@@ -280,7 +281,14 @@ const Dashboard = () => {
               </button>
             </div>
 
-            {activeTab === "overview" && <PerformanceChart />}
+            {activeTab === "overview" && (
+              <>
+                <div className="mb-6">
+                  <VolatileAssets />
+                </div>
+                <PerformanceChart />
+              </>
+            )}
             {activeTab === "trades" && <TradeHistory />}
             {activeTab === "logs" && <AgentLogs />}
             {activeTab === "chat" && (

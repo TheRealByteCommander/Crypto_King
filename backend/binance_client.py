@@ -127,6 +127,40 @@ class BinanceClientWrapper:
             logger.error(f"Error getting current price: {e}")
             raise
     
+    def get_24h_ticker_stats(self) -> List[Dict[str, Any]]:
+        """Get 24h ticker statistics for all symbols."""
+        try:
+            tickers = self.client.get_ticker()
+            ticker_list = []
+            
+            for ticker in tickers:
+                price_change_percent = float(ticker.get('priceChangePercent', 0))
+                # Filter: Only include symbols with significant price movement (at least 1% change)
+                if abs(price_change_percent) >= 1.0:
+                    ticker_list.append({
+                        'symbol': ticker.get('symbol', ''),
+                        'price': float(ticker.get('lastPrice', 0)),
+                        'priceChange': float(ticker.get('priceChange', 0)),
+                        'priceChangePercent': price_change_percent,
+                        'highPrice': float(ticker.get('highPrice', 0)),
+                        'lowPrice': float(ticker.get('lowPrice', 0)),
+                        'volume': float(ticker.get('volume', 0)),
+                        'quoteVolume': float(ticker.get('quoteVolume', 0))
+                    })
+            
+            # Sort by absolute price change percent (volatility)
+            ticker_list.sort(key=lambda x: abs(x['priceChangePercent']), reverse=True)
+            
+            logger.info(f"Retrieved {len(ticker_list)} volatile symbols (24h)")
+            return ticker_list
+        
+        except BinanceAPIException as e:
+            logger.error(f"Binance API error getting 24h ticker stats: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error getting 24h ticker stats: {e}")
+            raise
+    
     def get_symbol_info(self, symbol: str) -> Dict[str, Any]:
         """Get symbol information including filters (lot size, step size, etc.)."""
         try:
