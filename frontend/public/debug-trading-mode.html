@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trading Mode Debug</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #fff; }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+        .info { color: #0ff; }
+        pre { background: #2e2e2e; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Trading Mode Debug</h1>
+    <button onclick="checkTradingMode()">Prüfe Trading Mode</button>
+    <div id="results"></div>
+
+    <script>
+        function checkTradingMode() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h2>Ergebnisse:</h2>';
+
+            // 1. Prüfe ob BotControl Panel existiert
+            const botControl = document.querySelector('[data-testid="bot-control-panel"]');
+            results.innerHTML += `<p class="${botControl ? 'success' : 'error'}">BotControl Panel: ${botControl ? '✓ Gefunden' : '✗ NICHT gefunden'}</p>`;
+
+            // 2. Prüfe Trading Mode Select
+            const tradingModeSelect = document.querySelector('[data-testid="trading-mode-select"]');
+            results.innerHTML += `<p class="${tradingModeSelect ? 'success' : 'error'}">Trading Mode Select: ${tradingModeSelect ? '✓ Gefunden' : '✗ NICHT gefunden'}</p>`;
+
+            // 3. Prüfe Label
+            const labels = Array.from(document.querySelectorAll('label'));
+            const tradingModeLabel = labels.find(l => l.textContent.includes('Trading Mode'));
+            results.innerHTML += `<p class="${tradingModeLabel ? 'success' : 'error'}">Trading Mode Label: ${tradingModeLabel ? '✓ Gefunden' : '✗ NICHT gefunden'}</p>`;
+
+            // 4. Prüfe Grid Container
+            const grids = Array.from(document.querySelectorAll('.grid'));
+            const formGrid = grids.find(g => g.textContent.includes('Strategy') && g.textContent.includes('Timeframe'));
+            results.innerHTML += `<p class="${formGrid ? 'success' : 'error'}">Form Grid: ${formGrid ? '✓ Gefunden' : '✗ NICHT gefunden'}</p>`;
+
+            if (formGrid) {
+                results.innerHTML += `<p class="info">Grid Children: ${formGrid.children.length}</p>`;
+                Array.from(formGrid.children).forEach((child, idx) => {
+                    results.innerHTML += `<p class="info">  Child ${idx}: ${child.tagName} - "${child.textContent.substring(0, 50)}"</p>`;
+                });
+            }
+
+            // 5. Alle Selects finden
+            const allSelects = document.querySelectorAll('select, [role="combobox"]');
+            results.innerHTML += `<p class="info">Alle Selects gefunden: ${allSelects.length}</p>`;
+
+            // 6. Prüfe ob Trading Mode im JavaScript Bundle ist
+            const scripts = Array.from(document.querySelectorAll('script[src]'));
+            const mainScript = scripts.find(s => s.src.includes('/static/js/main.'));
+            if (mainScript) {
+                results.innerHTML += `<p class="info">Main Script: ${mainScript.src}</p>`;
+                fetch(mainScript.src)
+                    .then(r => r.text())
+                    .then(text => {
+                        if (text.includes('tradingMode') || text.includes('Trading Mode')) {
+                            results.innerHTML += `<p class="success">✓ Trading Mode im JavaScript Bundle gefunden</p>`;
+                        } else {
+                            results.innerHTML += `<p class="error">✗ Trading Mode NICHT im JavaScript Bundle</p>`;
+                        }
+                    })
+                    .catch(e => {
+                        results.innerHTML += `<p class="error">Fehler beim Laden: ${e.message}</p>`;
+                    });
+            }
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            setTimeout(checkTradingMode, 2000);
+        });
+    </script>
+</body>
+</html>
+
