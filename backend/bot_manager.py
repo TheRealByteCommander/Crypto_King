@@ -526,10 +526,13 @@ class TradingBot:
                 }
                 await self.db.trades.insert_one(trade)
                 
-                logger.info(f"Bot {self.bot_id}: BUY order executed: {quantity} {symbol} at {current_price} USDT")
+                # Check total spent after trade
+                total_spent_after = await self._get_total_spent()
+                remaining = configured_amount - total_spent_after
+                logger.info(f"Bot {self.bot_id}: BUY order executed: {quantity} {symbol} at {current_price} USDT | Total spent: {total_spent_after:.2f}/{configured_amount:.2f} USDT (Remaining: {remaining:.2f} USDT)")
                 await self.agent_manager.log_agent_message(
                     "CypherTrade",
-                    f"BUY order executed: {quantity} {symbol} at {current_price} USDT (Order ID: {order.get('orderId')})",
+                    f"BUY order executed: {quantity} {symbol} at {current_price} USDT | Total spent: {total_spent_after:.2f}/{configured_amount:.2f} USDT (Remaining: {remaining:.2f} USDT) (Order ID: {order.get('orderId')})",
                     "trade"
                 )
                 
