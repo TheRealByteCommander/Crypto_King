@@ -14,6 +14,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
   const [strategy, setStrategy] = useState("ma_crossover");
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [amount, setAmount] = useState("100");
+  const [timeframe, setTimeframe] = useState("5m");
   const [loading, setLoading] = useState(false);
   const [strategies, setStrategies] = useState({
     "ma_crossover": "Moving Average Crossover (SMA 20/50)",
@@ -52,7 +53,8 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
       const response = await axios.post(`${API}/bot/start`, {
         strategy,
         symbol,
-        amount: parseFloat(amount)
+        amount: parseFloat(amount),
+        timeframe
       });
       
       if (response.data.success) {
@@ -61,6 +63,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
         // Reset form
         setSymbol("BTCUSDT");
         setAmount("100");
+        setTimeframe("5m");
       } else {
         toast.error(response.data.message || "Failed to start bot");
       }
@@ -140,6 +143,12 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                         <p className="text-slate-400 mb-1">Symbol</p>
                         <p className="text-slate-100 font-medium mono">
                           {bot.config?.symbol || "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 mb-1">Timeframe</p>
+                        <p className="text-slate-100 font-medium mono">
+                          {bot.config?.timeframe || "5m"}
                         </p>
                       </div>
                       <div>

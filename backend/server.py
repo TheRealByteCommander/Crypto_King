@@ -142,6 +142,7 @@ class BotStartRequest(BaseModel):
     strategy: str = "ma_crossover"
     symbol: str = "BTCUSDT"
     amount: float = 100.0
+    timeframe: str = "5m"  # Trading timeframe: 1m, 5m, 15m, 30m, 1h, 4h, 1d
     bot_id: Optional[str] = None  # If not provided, creates new bot
 
 class BotResponse(BaseModel):
@@ -312,7 +313,7 @@ async def start_bot(request: BotStartRequest):
                 data=None
             )
         
-        result = await bot.start(request.strategy, request.symbol, request.amount)
+        result = await bot.start(request.strategy, request.symbol, request.amount, request.timeframe)
         
         # Convert ObjectId to strings before broadcasting and returning
         clean_result = convert_objectid_to_str(result)

@@ -43,7 +43,7 @@ class TradingBot:
         self.current_config = None
         self.task = None
     
-    async def start(self, strategy: str, symbol: str, amount: float) -> Dict[str, Any]:
+    async def start(self, strategy: str, symbol: str, amount: float, timeframe: str = "5m") -> Dict[str, Any]:
         """Start the trading bot with specified parameters."""
         try:
             if self.is_running:
@@ -61,12 +61,21 @@ class TradingBot:
                     "message": error_msg or f"Symbol {symbol_upper} is not tradable on Binance"
                 }
             
+            # Validate timeframe
+            valid_timeframes = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
+            if timeframe not in valid_timeframes:
+                return {
+                    "success": False,
+                    "message": f"Invalid timeframe '{timeframe}'. Valid timeframes: {', '.join(valid_timeframes)}"
+                }
+            
             # Store configuration (use validated uppercase symbol)
             self.current_config = {
                 "bot_id": self.bot_id,
                 "strategy": strategy,
                 "symbol": symbol_upper,
                 "amount": amount,
+                "timeframe": timeframe,
                 "started_at": datetime.now(timezone.utc).isoformat()
             }
             
@@ -290,9 +299,10 @@ class TradingBot:
         
         while self.is_running:
             try:
-                # Step 1: Get market data
-                logger.info(f"Bot {self.bot_id}: Fetching market data...")
-                market_data = self.binance_client.get_market_data(symbol, interval="5m", limit=100)
+                # Step 1: Get market data with configured timeframe
+                timeframe = self.current_config.get("timeframe", "5m")
+                logger.info(f"Bot {self.bot_id}: Fetching market data (timeframe: {timeframe})...")
+                market_data = self.binance_client.get_market_data(symbol, interval=timeframe, limit=100)
                 
                 # Step 2: Analyze with strategy
                 logger.info(f"Bot {self.bot_id}: Analyzing market data...")
