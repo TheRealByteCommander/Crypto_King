@@ -46,7 +46,7 @@ class TradingBot:
         self.position_size = 0.0  # Quantity of base asset in position
         self.position_entry_price = 0.0  # Entry price for current position
     
-    async def start(self, strategy: str, symbol: str, amount: float, timeframe: str = "5m") -> Dict[str, Any]:
+    async def start(self, strategy: str, symbol: str, amount: float, timeframe: str = "5m", trading_mode: str = "SPOT") -> Dict[str, Any]:
         """Start the trading bot with specified parameters."""
         try:
             if self.is_running:
@@ -54,6 +54,15 @@ class TradingBot:
             
             # Initialize Binance client (can be shared across bots)
             self.binance_client = BinanceClientWrapper()
+            
+            # Validate trading mode
+            valid_modes = ["SPOT", "MARGIN", "FUTURES"]
+            trading_mode_upper = trading_mode.upper()
+            if trading_mode_upper not in valid_modes:
+                return {
+                    "success": False,
+                    "message": f"Invalid trading mode '{trading_mode}'. Valid modes: {', '.join(valid_modes)}"
+                }
             
             # Validate symbol before starting
             symbol_upper = symbol.upper()
@@ -79,6 +88,7 @@ class TradingBot:
                 "symbol": symbol_upper,
                 "amount": amount,
                 "timeframe": timeframe,
+                "trading_mode": trading_mode_upper,
                 "started_at": datetime.now(timezone.utc).isoformat()
             }
             
@@ -356,26 +366,65 @@ class TradingBot:
                 # Wait before retrying
                 await asyncio.sleep(BOT_ERROR_RETRY_DELAY_SECONDS)
     
-    async def _update_position_from_balance(self, symbol: str):
-        """Update position status based on current balance."""
+    async def _update_position_from_balance(self, symbol: str, trading_mode: str = "SPOT"):
+        """Update position status based on current balance and trading mode."""
         try:
-            base_asset = symbol.replace("USDT", "")
-            balance = self.binance_client.get_account_balance(base_asset)
+            trading_mode_upper = trading_mode.upper() if trading_mode else "SPOT"
             
-            if balance > 0:
-                self.position = "LONG"
-                self.position_size = balance
-                # Try to get entry price from last BUY trade for this bot
-                last_buy = await self.db.trades.find_one(
-                    {"bot_id": self.bot_id, "symbol": symbol, "side": "BUY"},
-                    sort=[("timestamp", -1)]
-                )
-                if last_buy:
-                    self.position_entry_price = last_buy.get("entry_price", 0.0)
+            if trading_mode_upper == "SPOT":
+                base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                balance = self.binance_client.get_account_balance(base_asset, trading_mode_upper)
+                
+                if balance > 0:
+                    self.position = "LONG"
+                    self.position_size = balance
+                    # Try to get entry price from last BUY trade for this bot
+                    last_buy = await self.db.trades.find_one(
+                        {"bot_id": self.bot_id, "symbol": symbol, "side": "BUY"},
+                        sort=[("timestamp", -1)]
+                    )
+                    if last_buy:
+                        self.position_entry_price = last_buy.get("entry_price", 0.0)
+                else:
+                    self.position = None
+                    self.position_size = 0.0
+                    self.position_entry_price = 0.0
+            
+            elif trading_mode_upper == "MARGIN":
+                # Check margin position
+                margin_pos = self.binance_client.get_margin_position(symbol)
+                if margin_pos:
+                    self.position = margin_pos["type"]
+                    self.position_size = margin_pos.get("borrowed", 0) or margin_pos.get("netAsset", 0)
+                    # Try to get entry price from last trade
+                    last_trade = await self.db.trades.find_one(
+                        {"bot_id": self.bot_id, "symbol": symbol},
+                        sort=[("timestamp", -1)]
+                    )
+                    if last_trade:
+                        self.position_entry_price = last_trade.get("entry_price", 0.0)
+                else:
+                    self.position = None
+                    self.position_size = 0.0
+                    self.position_entry_price = 0.0
+            
+            elif trading_mode_upper == "FUTURES":
+                # Check futures position
+                futures_pos = self.binance_client.get_futures_position(symbol)
+                if futures_pos:
+                    self.position = futures_pos["type"]
+                    self.position_size = futures_pos["size"]
+                    self.position_entry_price = futures_pos.get("entry_price", 0.0)
+                else:
+                    self.position = None
+                    self.position_size = 0.0
+                    self.position_entry_price = 0.0
             else:
+                # Unknown trading mode - reset position
                 self.position = None
                 self.position_size = 0.0
                 self.position_entry_price = 0.0
+                
         except Exception as e:
             logger.warning(f"Bot {self.bot_id}: Could not update position from balance: {e}")
             self.position = None
@@ -409,14 +458,16 @@ class TradingBot:
                 quantity = adjusted_quantity
                 
                 # Validate balance
-                balance = self.binance_client.get_account_balance("USDT")
+                trading_mode = self.current_config.get("trading_mode", "SPOT")
+                balance = self.binance_client.get_account_balance("USDT", trading_mode)
                 required_usdt = quantity * current_price
                 if balance < required_usdt:
-                    logger.warning(f"Bot {self.bot_id}: Insufficient USDT balance. Required: {required_usdt:.2f}, Available: {balance:.2f}")
+                    logger.warning(f"Bot {self.bot_id}: Insufficient USDT balance ({trading_mode}). Required: {required_usdt:.2f}, Available: {balance:.2f}")
                     return
                 
                 # Execute order
-                order = self.binance_client.execute_order(symbol, "BUY", quantity)
+                trading_mode = self.current_config.get("trading_mode", "SPOT")
+                order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                 
                 # Save trade to database
                 trade = {
@@ -430,6 +481,7 @@ class TradingBot:
                     "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
                     "entry_price": current_price,
                     "strategy": self.current_config["strategy"],
+                    "trading_mode": trading_mode,
                     "confidence": analysis.get("confidence", 0.0),
                     "indicators": analysis.get("indicators", {}),
                     "timestamp": datetime.now(timezone.utc).isoformat()
@@ -458,40 +510,106 @@ class TradingBot:
             
             elif signal == "SELL":
                 # Update position status before executing SELL
-                await self._update_position_from_balance(symbol)
+                trading_mode = self.current_config.get("trading_mode", "SPOT")
+                await self._update_position_from_balance(symbol, trading_mode)
                 
-                base_asset = symbol.replace("USDT", "")
-                balance = self.binance_client.get_account_balance(base_asset)
+                base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
                 
-                if balance > 0:
+                # Check current position
+                if self.position == "LONG":
                     # We have a LONG position - close it
-                    # Adjust quantity to match Binance LOT_SIZE filter requirements
-                    quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
+                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    balance = self.binance_client.get_account_balance(base_asset, trading_mode)
                     
-                    # Adjust quantity to meet MIN_NOTIONAL filter requirements
+                    if balance > 0:
+                        # Adjust quantity to match Binance LOT_SIZE filter requirements
+                        quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
+                        
+                        # Adjust quantity to meet MIN_NOTIONAL filter requirements
+                        current_price = self.binance_client.get_current_price(symbol)
+                        adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                        if adjusted_quantity is None:
+                            logger.warning(f"Bot {self.bot_id}: Order value too small for {symbol}, skipping trade")
+                            return
+                        quantity = adjusted_quantity
+                        
+                        # Execute order
+                        order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
+                        
+                        # Calculate profit/loss
+                        pnl = None
+                        pnl_percent = None
+                        if self.position_entry_price > 0:
+                            pnl = (current_price - self.position_entry_price) * quantity
+                            pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                        
+                        # Save trade
+                        trade = {
+                            "bot_id": self.bot_id,
+                            "symbol": symbol,
+                            "side": "SELL",
+                            "quantity": quantity,
+                            "order_id": str(order.get("orderId", "")),
+                            "status": order.get("status", ""),
+                            "executed_qty": float(order.get("executedQty", 0)),
+                            "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                            "entry_price": current_price,
+                            "strategy": self.current_config["strategy"],
+                            "trading_mode": trading_mode,
+                            "confidence": analysis.get("confidence", 0.0),
+                            "indicators": analysis.get("indicators", {}),
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                        
+                        if pnl is not None:
+                            trade["pnl"] = pnl
+                            trade["pnl_percent"] = pnl_percent
+                            trade["position_entry_price"] = self.position_entry_price
+                        
+                        await self.db.trades.insert_one(trade)
+                        
+                        # Position closed
+                        self.position = None
+                        self.position_size = 0.0
+                        self.position_entry_price = 0.0
+                        
+                        pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
+                        logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg})")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg}) (Order ID: {order.get('orderId')})",
+                            "trade"
+                        )
+                
+                elif self.position == "SHORT":
+                    # We have a SHORT position - close it by buying
                     current_price = self.binance_client.get_current_price(symbol)
+                    amount_usdt = self.current_config["amount"]
+                    
+                    # Calculate quantity to buy to close short
+                    quantity = amount_usdt / current_price
+                    quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
                     adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
                     if adjusted_quantity is None:
                         logger.warning(f"Bot {self.bot_id}: Order value too small for {symbol}, skipping trade")
                         return
                     quantity = adjusted_quantity
                     
-                    # Execute order
-                    order = self.binance_client.execute_order(symbol, "SELL", quantity)
+                    # Execute BUY order to close SHORT
+                    order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                     
-                    # Calculate profit/loss if we had a position
+                    # Calculate profit/loss (for SHORT: profit when price goes down)
                     pnl = None
                     pnl_percent = None
-                    if self.position == "LONG" and self.position_entry_price > 0:
-                        # Calculate realized PnL based on average entry price
-                        pnl = (current_price - self.position_entry_price) * quantity
-                        pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                    if self.position_entry_price > 0:
+                        pnl = (self.position_entry_price - current_price) * quantity
+                        pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
                     
-                    # Save trade to database
+                    # Save trade
                     trade = {
                         "bot_id": self.bot_id,
                         "symbol": symbol,
-                        "side": "SELL",
+                        "side": "BUY",  # BUY to close SHORT
                         "quantity": quantity,
                         "order_id": str(order.get("orderId", "")),
                         "status": order.get("status", ""),
@@ -499,6 +617,8 @@ class TradingBot:
                         "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
                         "entry_price": current_price,
                         "strategy": self.current_config["strategy"],
+                        "trading_mode": trading_mode,
+                        "position_type": "SHORT_CLOSE",
                         "confidence": analysis.get("confidence", 0.0),
                         "indicators": analysis.get("indicators", {}),
                         "timestamp": datetime.now(timezone.utc).isoformat()
@@ -511,35 +631,77 @@ class TradingBot:
                     
                     await self.db.trades.insert_one(trade)
                     
-                    # Update position tracking - position is closed
+                    # SHORT position closed
                     self.position = None
                     self.position_size = 0.0
-                    old_entry_price = self.position_entry_price
                     self.position_entry_price = 0.0
                     
-                    pnl_msg = ""
-                    if pnl is not None:
-                        pnl_sign = "+" if pnl >= 0 else ""
-                        pnl_msg = f" | P/L: {pnl_sign}{pnl:.2f} USDT ({pnl_percent:+.2f}%)"
-                    
-                    logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {current_price} USDT (Position closed{pnl_msg})")
+                    pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
+                    logger.info(f"Bot {self.bot_id}: BUY order executed to close SHORT: {quantity} {symbol} at {current_price} USDT{pnl_msg}")
                     await self.agent_manager.log_agent_message(
                         "CypherTrade",
-                        f"SELL order executed: {quantity} {symbol} at {current_price} USDT (Position closed{pnl_msg}) (Order ID: {order.get('orderId')})",
+                        f"BUY order executed to close SHORT: {quantity} {symbol} at {current_price} USDT{pnl_msg} (Order ID: {order.get('orderId')})",
                         "trade"
                     )
+                
                 else:
-                    # No position to close - in Spot Trading, we cannot open a SHORT position
-                    # (would require Margin/Futures trading)
-                    logger.info(f"Bot {self.bot_id}: SELL signal received but no {base_asset} position to close. Spot Trading does not support short positions.")
-                    await self.agent_manager.log_agent_message(
-                        "CypherTrade",
-                        f"SELL signal received but no position to close. Spot Trading only supports closing LONG positions.",
-                        "info"
-                    )
-                    self.position = None
-                    self.position_size = 0.0
-                    self.position_entry_price = 0.0
+                    # No position - check if we can open a SHORT position
+                    if trading_mode in ["MARGIN", "FUTURES"]:
+                        # Open SHORT position
+                        amount_usdt = self.current_config["amount"]
+                        current_price = self.binance_client.get_current_price(symbol)
+                        
+                        # Calculate quantity
+                        quantity = amount_usdt / current_price
+                        quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
+                        adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                        if adjusted_quantity is None:
+                            logger.warning(f"Bot {self.bot_id}: Order value too small for {symbol}, skipping trade")
+                            return
+                        quantity = adjusted_quantity
+                        
+                        # Execute SELL order to open SHORT (for Margin/Futures)
+                        order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
+                        
+                        # Save trade
+                        trade = {
+                            "bot_id": self.bot_id,
+                            "symbol": symbol,
+                            "side": "SELL",
+                            "quantity": quantity,
+                            "order_id": str(order.get("orderId", "")),
+                            "status": order.get("status", ""),
+                            "executed_qty": float(order.get("executedQty", 0)),
+                            "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                            "entry_price": current_price,
+                            "strategy": self.current_config["strategy"],
+                            "trading_mode": trading_mode,
+                            "position_type": "SHORT_OPEN",
+                            "confidence": analysis.get("confidence", 0.0),
+                            "indicators": analysis.get("indicators", {}),
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                        await self.db.trades.insert_one(trade)
+                        
+                        # Update position tracking - SHORT position opened
+                        self.position = "SHORT"
+                        self.position_size = quantity
+                        self.position_entry_price = current_price
+                        
+                        logger.info(f"Bot {self.bot_id}: SELL order executed to open SHORT: {quantity} {symbol} at {current_price} USDT ({trading_mode})")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"SELL order executed to open SHORT position: {quantity} {symbol} at {current_price} USDT ({trading_mode}) (Order ID: {order.get('orderId')})",
+                            "trade"
+                        )
+                    else:
+                        # SPOT mode - cannot open SHORT
+                        logger.info(f"Bot {self.bot_id}: SELL signal received but no position to close. SPOT trading does not support short positions.")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"SELL signal received but no position to close. SPOT trading only supports closing LONG positions. Use MARGIN or FUTURES mode for short trading.",
+                            "info"
+                        )
         
         except Exception as e:
             logger.error(f"Bot {self.bot_id}: Trade execution error: {e}", exc_info=True)

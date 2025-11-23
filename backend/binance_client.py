@@ -9,7 +9,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class BinanceClientWrapper:
-    """Wrapper for Binance API client with error handling."""
+    """Wrapper for Binance API client with error handling. Supports SPOT, MARGIN, and FUTURES trading."""
     
     def __init__(self):
         """Initialize Binance client."""
@@ -54,15 +54,46 @@ class BinanceClientWrapper:
             logger.error(f"Error getting market data: {e}")
             raise
     
-    def get_account_balance(self, asset: str = "USDT") -> float:
-        """Get account balance for a specific asset."""
+    def get_account_balance(self, asset: str = "USDT", trading_mode: str = "SPOT") -> float:
+        """
+        Get account balance for a specific asset.
+        
+        Args:
+            asset: Asset symbol (e.g., 'USDT', 'BTC')
+            trading_mode: 'SPOT', 'MARGIN', or 'FUTURES'
+        """
         try:
-            account = self.client.get_account()
-            for balance in account['balances']:
-                if balance['asset'] == asset:
-                    free_balance = float(balance['free'])
-                    logger.info(f"Account balance for {asset}: {free_balance}")
-                    return free_balance
+            if trading_mode == "SPOT":
+                account = self.client.get_account()
+                for balance in account['balances']:
+                    if balance['asset'] == asset:
+                        free_balance = float(balance['free'])
+                        logger.info(f"SPOT account balance for {asset}: {free_balance}")
+                        return free_balance
+            elif trading_mode == "MARGIN":
+                # Margin account balance
+                margin_account = self.client.get_margin_account()
+                for balance in margin_account['userAssets']:
+                    if balance['asset'] == asset:
+                        free_balance = float(balance['free'])
+                        logger.info(f"MARGIN account balance for {asset}: {free_balance}")
+                        return free_balance
+            elif trading_mode == "FUTURES":
+                # Futures account balance
+                futures_account = self.client.futures_account()
+                if asset == "USDT":
+                    # For USDT futures, get USDT balance
+                    balance = float(futures_account.get('availableBalance', 0))
+                    logger.info(f"FUTURES account balance (USDT): {balance}")
+                    return balance
+                else:
+                    # For other assets, check positions
+                    positions = futures_account.get('positions', [])
+                    for pos in positions:
+                        if pos['symbol'] == asset and pos['positionSide'] == 'BOTH':
+                            amount = float(pos.get('positionAmt', 0))
+                            logger.info(f"FUTURES position for {asset}: {amount}")
+                            return abs(amount)
             return 0.0
         except BinanceAPIException as e:
             logger.error(f"Binance API error getting balance: {e}")
@@ -71,25 +102,104 @@ class BinanceClientWrapper:
             logger.error(f"Error getting balance: {e}")
             raise
     
-    def execute_order(self, symbol: str, side: str, quantity: float, order_type: str = "MARKET") -> Dict[str, Any]:
-        """Execute a buy or sell order."""
+    def get_margin_position(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get margin position for a symbol."""
         try:
-            logger.info(f"Executing {side} order: {quantity} {symbol} ({order_type})")
+            margin_account = self.client.get_margin_account()
             
-            order = self.client.create_order(
-                symbol=symbol,
-                side=side,
-                type=order_type,
-                quantity=quantity
-            )
+            # Extract base asset from symbol (e.g., BTCUSDT -> BTC)
+            base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
             
-            logger.info(f"Order executed successfully: {order['orderId']}")
+            # Check if we have a position (borrowed assets indicate short position)
+            for asset in margin_account.get('userAssets', []):
+                if asset['asset'] == base_asset:
+                    borrowed = float(asset.get('borrowed', 0))
+                    net_asset = float(asset.get('netAsset', 0))
+                    if borrowed > 0 or net_asset != 0:
+                        return {
+                            "type": "SHORT" if borrowed > 0 else "LONG",
+                            "symbol": symbol,
+                            "borrowed": borrowed,
+                            "netAsset": net_asset
+                        }
+            
+            return None
+        except Exception as e:
+            logger.warning(f"Could not get margin position for {symbol}: {e}")
+            return None
+    
+    def get_futures_position(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get futures position for a symbol."""
+        try:
+            positions = self.client.futures_position_information(symbol=symbol)
+            for pos in positions:
+                position_amt = float(pos.get('positionAmt', 0))
+                if abs(position_amt) > 0.0001:  # Ignore very small positions
+                    return {
+                        "type": "SHORT" if position_amt < 0 else "LONG",
+                        "symbol": symbol,
+                        "size": abs(position_amt),
+                        "entry_price": float(pos.get('entryPrice', 0)),
+                        "unrealized_pnl": float(pos.get('unRealizedProfit', 0)),
+                        "leverage": float(pos.get('leverage', 1))
+                    }
+            return None
+        except Exception as e:
+            logger.warning(f"Could not get futures position for {symbol}: {e}")
+            return None
+    
+    def execute_order(self, symbol: str, side: str, quantity: float, order_type: str = "MARKET", trading_mode: str = "SPOT") -> Dict[str, Any]:
+        """
+        Execute a buy or sell order.
+        
+        Args:
+            symbol: Trading pair symbol (e.g., 'BTCUSDT')
+            side: 'BUY' or 'SELL'
+            quantity: Quantity to trade
+            order_type: Order type (default: 'MARKET')
+            trading_mode: 'SPOT', 'MARGIN', or 'FUTURES'
+        """
+        try:
+            logger.info(f"Executing {side} order: {quantity} {symbol} ({order_type}) - Mode: {trading_mode}")
+            
+            if trading_mode == "SPOT":
+                order = self.client.create_order(
+                    symbol=symbol,
+                    side=side,
+                    type=order_type,
+                    quantity=quantity
+                )
+            elif trading_mode == "MARGIN":
+                # Margin trading - allows short positions
+                order = self.client.create_margin_order(
+                    symbol=symbol,
+                    side=side,
+                    type=order_type,
+                    quantity=quantity
+                )
+            elif trading_mode == "FUTURES":
+                # Futures trading - supports both long and short positions
+                # For futures, we need to specify position side: 'LONG' or 'SHORT'
+                position_side = "LONG" if side == "BUY" else "SHORT"
+                
+                # Futures uses different endpoint
+                order = self.client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type=order_type,
+                    quantity=quantity,
+                    positionSide=position_side
+                )
+            else:
+                raise ValueError(f"Unsupported trading mode: {trading_mode}")
+            
+            logger.info(f"Order executed successfully: {order.get('orderId', order.get('order_id', 'N/A'))}")
             return {
-                "orderId": order['orderId'],
-                "status": order['status'],
-                "executedQty": float(order['executedQty']),
-                "cummulativeQuoteQty": float(order.get('cummulativeQuoteQty', 0)),
-                "transactTime": order['transactTime']
+                "orderId": order.get('orderId') or order.get('order_id'),
+                "status": order.get('status', order.get('status')),
+                "executedQty": float(order.get('executedQty', order.get('executedQty', 0))),
+                "cummulativeQuoteQty": float(order.get('cummulativeQuoteQty', order.get('cumQuote', 0))),
+                "transactTime": order.get('transactTime', order.get('updateTime', 0))
             }
         
         except BinanceAPIException as e:

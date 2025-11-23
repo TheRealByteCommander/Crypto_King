@@ -143,6 +143,7 @@ class BotStartRequest(BaseModel):
     symbol: str = "BTCUSDT"
     amount: float = 100.0
     timeframe: str = "5m"  # Trading timeframe: 1m, 5m, 15m, 30m, 1h, 4h, 1d
+    trading_mode: str = "SPOT"  # SPOT, MARGIN, or FUTURES (enables short trading)
     bot_id: Optional[str] = None  # If not provided, creates new bot
 
 class BotResponse(BaseModel):
@@ -313,7 +314,7 @@ async def start_bot(request: BotStartRequest):
                 data=None
             )
         
-        result = await bot.start(request.strategy, request.symbol, request.amount, request.timeframe)
+        result = await bot.start(request.strategy, request.symbol, request.amount, request.timeframe, request.trading_mode)
         
         # Convert ObjectId to strings before broadcasting and returning
         clean_result = convert_objectid_to_str(result)
