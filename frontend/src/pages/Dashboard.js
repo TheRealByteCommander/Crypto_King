@@ -59,6 +59,10 @@ const Dashboard = () => {
     const wsUrl = `${BACKEND_URL.replace('https:', 'wss:').replace('http:', 'ws:')}/api/ws`;
     const websocket = new WebSocket(wsUrl);
 
+    // Throttle status updates to reduce performance warnings
+    let lastStatusUpdate = 0;
+    const STATUS_UPDATE_THROTTLE_MS = 1000; // Update at most once per second
+
     websocket.onopen = () => {
       console.log("WebSocket connected");
       toast.success("Real-time updates connected");
@@ -66,10 +70,19 @@ const Dashboard = () => {
 
     websocket.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log("WebSocket message:", data);
+      
+      // Only log non-status messages to reduce console spam
+      if (data.type !== "status_update") {
+        console.log("WebSocket message:", data);
+      }
       
       if (data.type === "status_update") {
-        setBotStatus(data.data);
+        // Throttle status updates to reduce performance warnings
+        const now = Date.now();
+        if (now - lastStatusUpdate >= STATUS_UPDATE_THROTTLE_MS) {
+          setBotStatus(data.data);
+          lastStatusUpdate = now;
+        }
       } else if (data.type === "bot_started") {
         // Only show success if it was actually successful
         if (data.success !== false) {
