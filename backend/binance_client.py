@@ -162,9 +162,9 @@ class BinanceClientWrapper:
                 # 1. Have status = 'TRADING'
                 # 2. Are SPOT trading type
                 # 3. End with USDT (or can be filtered for other quote assets)
-                if (symbol_info['status'] == 'TRADING' and 
-                    symbol_info['type'] == 'SPOT' and
-                    symbol_info['quoteAsset'] == 'USDT'):
+                    if (symbol_info.get('status') == 'TRADING' and 
+                    symbol_info.get('type') == 'SPOT' and
+                    symbol_info.get('quoteAsset') == 'USDT'):
                     tradable_symbols.append({
                         'symbol': symbol_info['symbol'],
                         'baseAsset': symbol_info['baseAsset'],
@@ -189,24 +189,28 @@ class BinanceClientWrapper:
             
             # Find the symbol
             symbol_upper = symbol.upper()
-            for symbol_info in exchange_info['symbols']:
-                if symbol_info['symbol'] == symbol_upper:
+            for symbol_info in exchange_info.get('symbols', []):
+                if symbol_info.get('symbol') == symbol_upper:
                     # Check if it's tradable
-                    if symbol_info['status'] != 'TRADING':
-                        return False, f"Symbol {symbol_upper} exists but is not tradable (status: {symbol_info['status']})"
+                    status = symbol_info.get('status', 'UNKNOWN')
+                    if status != 'TRADING':
+                        return False, f"Symbol {symbol_upper} exists but is not tradable (status: {status})"
                     
-                    if symbol_info['type'] != 'SPOT':
-                        return False, f"Symbol {symbol_upper} exists but is not a SPOT trading pair (type: {symbol_info['type']})"
+                    symbol_type = symbol_info.get('type', 'UNKNOWN')
+                    if symbol_type != 'SPOT':
+                        return False, f"Symbol {symbol_upper} exists but is not a SPOT trading pair (type: {symbol_type})"
                     
-                    if symbol_info['quoteAsset'] != 'USDT':
-                        return False, f"Symbol {symbol_upper} exists but is not a USDT pair (quote: {symbol_info['quoteAsset']})"
+                    quote_asset = symbol_info.get('quoteAsset', 'UNKNOWN')
+                    if quote_asset != 'USDT':
+                        return False, f"Symbol {symbol_upper} exists but is not a USDT pair (quote: {quote_asset})"
                     
                     # Symbol is valid and tradable
                     logger.info(f"Symbol {symbol_upper} validated: tradable SPOT USDT pair")
                     return True, None
             
             # Symbol not found - get suggestions
-            all_symbols = [s['symbol'] for s in exchange_info['symbols'] if s['quoteAsset'] == 'USDT']
+            all_symbols = [s.get('symbol', '') for s in exchange_info.get('symbols', []) 
+                          if s.get('quoteAsset') == 'USDT' and s.get('symbol')]
             similar = [s for s in all_symbols if symbol_upper in s or s.startswith(symbol_upper[:3])][:5]
             
             error_msg = f"Symbol {symbol_upper} not found on Binance"
