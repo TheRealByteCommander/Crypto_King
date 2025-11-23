@@ -202,8 +202,8 @@ class TradingBot:
                 amount_to_use = min(self.current_config["amount"], balance)
                 quantity = amount_to_use / current_price
                 
-                # Round to appropriate decimals
-                quantity = round(quantity, QUANTITY_DECIMAL_PLACES)
+                # Adjust quantity to match Binance LOT_SIZE filter requirements
+                quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
                 
                 if quantity > 0:
                     logger.info(f"Executing BUY: {quantity} {symbol}")
@@ -224,7 +224,8 @@ class TradingBot:
                 balance = self.binance_client.get_account_balance(base_asset)
                 
                 if balance > 0:
-                    quantity = round(balance, QUANTITY_DECIMAL_PLACES)
+                    # Adjust quantity to match Binance LOT_SIZE filter requirements
+                    quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
                     logger.info(f"Executing SELL: {quantity} {symbol}")
                     order = self.binance_client.execute_order(symbol, "SELL", quantity)
                     
@@ -278,8 +279,8 @@ class TradingBot:
                     balance = self.binance_client.get_account_balance(base_asset)
                     quantity = min(amount_usdt, balance) if amount_usdt else balance
             
-            # Round quantity to appropriate decimals
-            quantity = round(quantity, QUANTITY_DECIMAL_PLACES)
+            # Adjust quantity to match Binance LOT_SIZE filter requirements
+            quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
             
             if quantity <= 0:
                 return {"success": False, "message": f"Insufficient balance for {side} order"}

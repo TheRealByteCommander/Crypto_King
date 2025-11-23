@@ -126,3 +126,74 @@ class BinanceClientWrapper:
         except Exception as e:
             logger.error(f"Error getting current price: {e}")
             raise
+    
+    def get_symbol_info(self, symbol: str) -> Dict[str, Any]:
+        """Get symbol information including filters (lot size, step size, etc.)."""
+        try:
+            exchange_info = self.client.get_exchange_info()
+            for s in exchange_info['symbols']:
+                if s['symbol'] == symbol:
+                    filters = {}
+                    for f in s.get('filters', []):
+                        if f['filterType'] == 'LOT_SIZE':
+                            filters['lot_size'] = {
+                                'min_qty': float(f.get('minQty', 0)),
+                                'max_qty': float(f.get('maxQty', 0)),
+                                'step_size': float(f.get('stepSize', 0))
+                            }
+                        elif f['filterType'] == 'MIN_NOTIONAL':
+                            filters['min_notional'] = float(f.get('minNotional', 0))
+                    logger.info(f"Symbol info for {symbol}: {filters}")
+                    return filters
+            logger.warning(f"Symbol {symbol} not found in exchange info")
+            return {}
+        except Exception as e:
+            logger.error(f"Error getting symbol info for {symbol}: {e}")
+            return {}
+    
+    def adjust_quantity_to_lot_size(self, symbol: str, quantity: float) -> float:
+        """Adjust quantity to match Binance LOT_SIZE filter requirements."""
+        try:
+            symbol_info = self.get_symbol_info(symbol)
+            lot_size = symbol_info.get('lot_size')
+            
+            if not lot_size:
+                # If no lot size info available, round to 6 decimal places as fallback
+                logger.warning(f"No lot size info for {symbol}, using default rounding")
+                return round(quantity, 6)
+            
+            step_size = lot_size.get('step_size', 0)
+            min_qty = lot_size.get('min_qty', 0)
+            max_qty = lot_size.get('max_qty', 0)
+            
+            # Calculate precision from step_size
+            # e.g., step_size = 0.001 -> precision = 3
+            if step_size > 0:
+                # Count decimal places in step_size
+                step_str = f"{step_size:.10f}".rstrip('0')
+                if '.' in step_str:
+                    precision = len(step_str.split('.')[1])
+                else:
+                    precision = 0
+                
+                # Round down to nearest step_size
+                adjusted_qty = (quantity // step_size) * step_size
+                adjusted_qty = round(adjusted_qty, precision)
+            else:
+                adjusted_qty = round(quantity, 6)
+            
+            # Apply min/max constraints
+            if min_qty > 0 and adjusted_qty < min_qty:
+                logger.warning(f"Quantity {adjusted_qty} below min_qty {min_qty} for {symbol}, using min_qty")
+                adjusted_qty = min_qty
+            if max_qty > 0 and adjusted_qty > max_qty:
+                logger.warning(f"Quantity {adjusted_qty} above max_qty {max_qty} for {symbol}, using max_qty")
+                adjusted_qty = max_qty
+            
+            logger.info(f"Adjusted quantity for {symbol}: {quantity} -> {adjusted_qty} (step_size={step_size}, min={min_qty}, max={max_qty})")
+            return adjusted_qty
+            
+        except Exception as e:
+            logger.error(f"Error adjusting quantity to lot size for {symbol}: {e}")
+            # Fallback to default rounding
+            return round(quantity, 6)
