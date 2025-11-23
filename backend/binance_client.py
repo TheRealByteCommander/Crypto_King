@@ -157,19 +157,19 @@ class BinanceClientWrapper:
             exchange_info = self.client.get_exchange_info()
             tradable_symbols = []
             
-            for symbol_info in exchange_info['symbols']:
+            for symbol_info in exchange_info.get('symbols', []):
                 # Only include symbols that:
                 # 1. Have status = 'TRADING'
                 # 2. Are SPOT trading type
                 # 3. End with USDT (or can be filtered for other quote assets)
-                    if (symbol_info.get('status') == 'TRADING' and 
+                if (symbol_info.get('status') == 'TRADING' and 
                     symbol_info.get('type') == 'SPOT' and
                     symbol_info.get('quoteAsset') == 'USDT'):
                     tradable_symbols.append({
-                        'symbol': symbol_info['symbol'],
-                        'baseAsset': symbol_info['baseAsset'],
-                        'quoteAsset': symbol_info['quoteAsset'],
-                        'status': symbol_info['status']
+                        'symbol': symbol_info.get('symbol', ''),
+                        'baseAsset': symbol_info.get('baseAsset', ''),
+                        'quoteAsset': symbol_info.get('quoteAsset', ''),
+                        'status': symbol_info.get('status', 'UNKNOWN')
                     })
             
             logger.info(f"Found {len(tradable_symbols)} tradable USDT pairs on Binance")
