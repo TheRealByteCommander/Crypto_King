@@ -214,6 +214,21 @@ class TradingBot:
                 # Adjust quantity to match Binance LOT_SIZE filter requirements
                 quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
                 
+                # Adjust quantity to meet MIN_NOTIONAL filter requirements
+                adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                if adjusted_quantity is None:
+                    logger.warning(f"Cannot meet notional requirement for {symbol}. Order value too small.")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"BUY order skipped: Order value too small to meet Binance minimum notional requirement for {symbol}",
+                        "error"
+                    )
+                    return
+                
+                quantity = adjusted_quantity
+                final_notional = quantity * current_price
+                logger.info(f"Final order for {symbol}: {quantity} @ {current_price} = {final_notional:.2f} USDT")
+                
                 if quantity > 0:
                     logger.info(f"Executing BUY: {quantity} {symbol}")
                     order = self.binance_client.execute_order(symbol, "BUY", quantity)
@@ -235,6 +250,22 @@ class TradingBot:
                 if balance > 0:
                     # Adjust quantity to match Binance LOT_SIZE filter requirements
                     quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
+                    
+                    # Adjust quantity to meet MIN_NOTIONAL filter requirements
+                    adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                    if adjusted_quantity is None:
+                        logger.warning(f"Cannot meet notional requirement for {symbol}. Order value too small.")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"SELL order skipped: Order value too small to meet Binance minimum notional requirement for {symbol}",
+                            "error"
+                        )
+                        return
+                    
+                    quantity = adjusted_quantity
+                    final_notional = quantity * current_price
+                    logger.info(f"Final order for {symbol}: {quantity} @ {current_price} = {final_notional:.2f} USDT")
+                    
                     logger.info(f"Executing SELL: {quantity} {symbol}")
                     order = self.binance_client.execute_order(symbol, "SELL", quantity)
                     

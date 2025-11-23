@@ -306,3 +306,57 @@ class BinanceClientWrapper:
             logger.error(f"Error adjusting quantity to lot size for {symbol}: {e}")
             # Fallback to default rounding
             return round(quantity, 6)
+    
+    def adjust_quantity_to_notional(self, symbol: str, quantity: float, price: float) -> Optional[float]:
+        """
+        Adjust quantity to meet Binance MIN_NOTIONAL filter requirements.
+        Returns adjusted quantity or None if notional requirement cannot be met.
+        """
+        try:
+            symbol_info = self.get_symbol_info(symbol)
+            min_notional = symbol_info.get('min_notional', 0)
+            
+            if min_notional <= 0:
+                # No notional requirement - quantity is fine as is
+                return quantity
+            
+            # Calculate current notional value
+            current_notional = quantity * price
+            
+            # Check if current notional meets minimum
+            if current_notional >= min_notional:
+                logger.info(f"Notional check passed for {symbol}: {current_notional:.2f} >= {min_notional:.2f}")
+                return quantity
+            
+            # Need to increase quantity to meet notional requirement
+            required_quantity = min_notional / price
+            
+            logger.info(f"Notional check failed for {symbol}: {current_notional:.2f} < {min_notional:.2f}, adjusting quantity from {quantity} to {required_quantity}")
+            
+            # Adjust the required quantity to lot size first
+            adjusted_qty = self.adjust_quantity_to_lot_size(symbol, required_quantity)
+            
+            # Check again if adjusted quantity meets notional
+            adjusted_notional = adjusted_qty * price
+            if adjusted_notional < min_notional:
+                # Still below minimum even after lot size adjustment
+                # Try increasing by one step
+                symbol_info_full = self.get_symbol_info(symbol)
+                lot_size = symbol_info_full.get('lot_size', {})
+                step_size = lot_size.get('step_size', 0)
+                
+                if step_size > 0:
+                    # Try adding one more step
+                    adjusted_qty = adjusted_qty + step_size
+                    adjusted_notional = adjusted_qty * price
+                
+                if adjusted_notional < min_notional:
+                    logger.warning(f"Cannot meet notional requirement for {symbol}: required {min_notional:.2f}, would be {adjusted_notional:.2f}")
+                    return None
+            
+            logger.info(f"Adjusted quantity for notional: {quantity} -> {adjusted_qty} (notional: {adjusted_notional:.2f} >= {min_notional:.2f})")
+            return adjusted_qty
+            
+        except Exception as e:
+            logger.error(f"Error adjusting quantity to notional for {symbol}: {e}")
+            return quantity  # Return original quantity on error
