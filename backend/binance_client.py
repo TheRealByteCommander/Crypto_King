@@ -166,39 +166,44 @@ class BinanceClientWrapper:
         try:
             import numpy as np
             
-            # Get all tradable symbols
+            # Get 24h ticker first to get current prices and volumes
+            tickers_24h = self.client.get_ticker()
+            ticker_dict = {t.get('symbol'): {
+                'volume': float(t.get('quoteVolume', 0)),
+                'price': float(t.get('lastPrice', 0)),
+                'priceChangePercent': float(t.get('priceChangePercent', 0))
+            } for t in tickers_24h}
+            
+            # Get all tradable symbols and filter by volume
             exchange_info = self.client.get_exchange_info()
             tradable_symbols = []
             
             for symbol_info in exchange_info.get('symbols', []):
                 if symbol_info.get('status') == 'TRADING':
-                    # Only include SPOT trading pairs with USDT, BUSD, or BTC as quote asset
+                    symbol = symbol_info.get('symbol', '')
+                    # Only include symbols that have 24h ticker data and USDT/BUSD/BTC pairs
                     quote_asset = symbol_info.get('quoteAsset', '')
-                    if quote_asset in ['USDT', 'BUSD', 'BTC']:
-                        tradable_symbols.append(symbol_info.get('symbol', ''))
+                    if symbol in ticker_dict and quote_asset in ['USDT', 'BUSD', 'BTC']:
+                        tradable_symbols.append(symbol)
             
-            logger.info(f"Analyzing 30-day volatility for {len(tradable_symbols)} symbols...")
+            logger.info(f"Analyzing 30-day volatility for symbols (starting with top 100 by volume)...")
+            
+            # Sort by volume and take top 100 for performance (instead of 500)
+            sorted_symbols = sorted(
+                tradable_symbols,
+                key=lambda x: ticker_dict.get(x, {}).get('volume', 0),
+                reverse=True
+            )[:100]
             
             volatile_assets = []
             
-            # Sample a subset for performance (top 500 symbols by volume)
-            # Get 24h ticker first to get volume
-            tickers_24h = self.client.get_ticker()
-            ticker_dict = {t.get('symbol'): float(t.get('quoteVolume', 0)) for t in tickers_24h}
-            
-            # Sort by volume and take top 500
-            sorted_symbols = sorted(
-                [s for s in tradable_symbols if s in ticker_dict],
-                key=lambda x: ticker_dict.get(x, 0),
-                reverse=True
-            )[:500]
-            
-            for symbol in sorted_symbols:
+            # Process symbols (with progress logging every 20)
+            for idx, symbol in enumerate(sorted_symbols):
                 try:
                     # Get 30 days of daily candles
                     klines = self.client.get_klines(symbol=symbol, interval="1d", limit=30)
                     
-                    if len(klines) < 30:
+                    if len(klines) < 20:  # Need at least 20 days of data
                         continue
                     
                     # Extract closing prices
@@ -217,7 +222,7 @@ class BinanceClientWrapper:
                             daily_return = ((closes[i] - closes[i-1]) / closes[i-1]) * 100
                             daily_returns.append(daily_return)
                     
-                    if len(daily_returns) < 2:
+                    if len(daily_returns) < 5:  # Need at least 5 daily returns
                         continue
                     
                     volatility_30d = np.std(daily_returns) if daily_returns else 0
@@ -226,11 +231,14 @@ class BinanceClientWrapper:
                     recent_volumes = [float(k[5]) for k in klines[-7:]]  # index 5 is volume
                     avg_volume = sum(recent_volumes) / len(recent_volumes) if recent_volumes else 0
                     
+                    # Use current price from ticker if available
+                    current_price = ticker_dict.get(symbol, {}).get('price', closes[-1])
+                    
                     # Only include if 30-day change is at least 5% or volatility is significant
                     if abs(price_change_30d) >= 5.0 or volatility_30d >= 3.0:
                         volatile_assets.append({
                             'symbol': symbol,
-                            'price': closes[-1],
+                            'price': current_price,
                             'priceChangePercent': round(price_change_30d, 2),
                             'volatility30d': round(volatility_30d, 2),
                             'highPrice': max(closes),
@@ -240,7 +248,12 @@ class BinanceClientWrapper:
                 
                 except Exception as e:
                     # Skip symbols that cause errors (may not have enough data)
+                    logger.debug(f"Skipping {symbol} due to error: {e}")
                     continue
+                
+                # Log progress every 20 symbols
+                if (idx + 1) % 20 == 0:
+                    logger.info(f"Processed {idx + 1}/{len(sorted_symbols)} symbols, found {len(volatile_assets)} volatile assets so far...")
             
             # Sort by absolute 30-day price change (volatility indicator)
             volatile_assets.sort(key=lambda x: abs(x['priceChangePercent']), reverse=True)
@@ -252,7 +265,7 @@ class BinanceClientWrapper:
             logger.error(f"Binance API error getting 30d volatile assets: {e}")
             raise
         except Exception as e:
-            logger.error(f"Error getting 30d volatile assets: {e}")
+            logger.error(f"Error getting 30d volatile assets: {e}", exc_info=True)
             raise
     
     def get_symbol_info(self, symbol: str) -> Dict[str, Any]:

@@ -576,9 +576,19 @@ async def get_volatile_assets(limit: int = 20):
         if bot.binance_client is None:
             from binance_client import BinanceClientWrapper
             temp_client = BinanceClientWrapper()
-            tickers = temp_client.get_30d_volatile_assets()
+            try:
+                tickers = temp_client.get_30d_volatile_assets()
+            except Exception as e:
+                logger.warning(f"30-day analysis failed, falling back to 24h: {e}")
+                # Fallback to 24h if 30-day fails
+                tickers = temp_client.get_24h_ticker_stats()
         else:
-            tickers = bot.binance_client.get_30d_volatile_assets()
+            try:
+                tickers = bot.binance_client.get_30d_volatile_assets()
+            except Exception as e:
+                logger.warning(f"30-day analysis failed, falling back to 24h: {e}")
+                # Fallback to 24h if 30-day fails
+                tickers = bot.binance_client.get_24h_ticker_stats()
         
         # Limit results
         limited_tickers = tickers[:limit]
