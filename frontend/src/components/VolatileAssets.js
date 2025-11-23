@@ -83,7 +83,7 @@ const VolatileAssets = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Zap className="w-6 h-6 text-yellow-400" />
-          <h2 className="text-2xl font-bold text-white">Volatilste Assets (24h)</h2>
+          <h2 className="text-2xl font-bold text-white">Volatilste Assets (30 Tage)</h2>
         </div>
         <button
           onClick={fetchVolatileAssets}
@@ -108,8 +108,8 @@ const VolatileAssets = () => {
               <th className="text-left py-3 px-4 text-slate-400 font-semibold">Symbol</th>
               <th className="text-left py-3 px-4 text-slate-400 font-semibold">Typ</th>
               <th className="text-right py-3 px-4 text-slate-400 font-semibold">Preis</th>
-              <th className="text-right py-3 px-4 text-slate-400 font-semibold">24h Änderung</th>
-              <th className="text-right py-3 px-4 text-slate-400 font-semibold">24h Volumen</th>
+              <th className="text-right py-3 px-4 text-slate-400 font-semibold">30 Tage Änderung</th>
+              <th className="text-right py-3 px-4 text-slate-400 font-semibold">Durchschn. Volumen</th>
             </tr>
           </thead>
           <tbody>

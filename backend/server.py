@@ -570,15 +570,15 @@ async def get_pattern_insights(symbol: str, strategy: str):
 
 @api_router.get("/market/volatile")
 async def get_volatile_assets(limit: int = 20):
-    """Get the most volatile assets (24h price change) for NexusChat dashboard."""
+    """Get the most volatile assets (30-day analysis) for NexusChat dashboard."""
     try:
         # Create a temporary Binance client if bot is not running
         if bot.binance_client is None:
             from binance_client import BinanceClientWrapper
             temp_client = BinanceClientWrapper()
-            tickers = temp_client.get_24h_ticker_stats()
+            tickers = temp_client.get_30d_volatile_assets()
         else:
-            tickers = bot.binance_client.get_24h_ticker_stats()
+            tickers = bot.binance_client.get_30d_volatile_assets()
         
         # Limit results
         limited_tickers = tickers[:limit]
@@ -593,7 +593,7 @@ async def get_volatile_assets(limit: int = 20):
         
         return result
     except Exception as e:
-        logger.error(f"Error getting volatile assets: {e}")
+        logger.error(f"Error getting volatile assets: {e}", exc_info=True)
         return {
             "success": False,
             "error": str(e),

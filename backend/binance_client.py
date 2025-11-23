@@ -161,6 +161,100 @@ class BinanceClientWrapper:
             logger.error(f"Error getting 24h ticker stats: {e}")
             raise
     
+    def get_30d_volatile_assets(self) -> List[Dict[str, Any]]:
+        """Get most volatile assets based on 30-day historical data."""
+        try:
+            import numpy as np
+            
+            # Get all tradable symbols
+            exchange_info = self.client.get_exchange_info()
+            tradable_symbols = []
+            
+            for symbol_info in exchange_info.get('symbols', []):
+                if symbol_info.get('status') == 'TRADING':
+                    # Only include SPOT trading pairs with USDT, BUSD, or BTC as quote asset
+                    quote_asset = symbol_info.get('quoteAsset', '')
+                    if quote_asset in ['USDT', 'BUSD', 'BTC']:
+                        tradable_symbols.append(symbol_info.get('symbol', ''))
+            
+            logger.info(f"Analyzing 30-day volatility for {len(tradable_symbols)} symbols...")
+            
+            volatile_assets = []
+            
+            # Sample a subset for performance (top 500 symbols by volume)
+            # Get 24h ticker first to get volume
+            tickers_24h = self.client.get_ticker()
+            ticker_dict = {t.get('symbol'): float(t.get('quoteVolume', 0)) for t in tickers_24h}
+            
+            # Sort by volume and take top 500
+            sorted_symbols = sorted(
+                [s for s in tradable_symbols if s in ticker_dict],
+                key=lambda x: ticker_dict.get(x, 0),
+                reverse=True
+            )[:500]
+            
+            for symbol in sorted_symbols:
+                try:
+                    # Get 30 days of daily candles
+                    klines = self.client.get_klines(symbol=symbol, interval="1d", limit=30)
+                    
+                    if len(klines) < 30:
+                        continue
+                    
+                    # Extract closing prices
+                    closes = [float(k[4]) for k in klines]  # index 4 is close price
+                    
+                    if len(closes) < 2 or closes[0] == 0:
+                        continue
+                    
+                    # Calculate 30-day price change percent
+                    price_change_30d = ((closes[-1] - closes[0]) / closes[0]) * 100
+                    
+                    # Calculate volatility (standard deviation of daily returns)
+                    daily_returns = []
+                    for i in range(1, len(closes)):
+                        if closes[i-1] > 0:
+                            daily_return = ((closes[i] - closes[i-1]) / closes[i-1]) * 100
+                            daily_returns.append(daily_return)
+                    
+                    if len(daily_returns) < 2:
+                        continue
+                    
+                    volatility_30d = np.std(daily_returns) if daily_returns else 0
+                    
+                    # Calculate average volume (last 7 days)
+                    recent_volumes = [float(k[5]) for k in klines[-7:]]  # index 5 is volume
+                    avg_volume = sum(recent_volumes) / len(recent_volumes) if recent_volumes else 0
+                    
+                    # Only include if 30-day change is at least 5% or volatility is significant
+                    if abs(price_change_30d) >= 5.0 or volatility_30d >= 3.0:
+                        volatile_assets.append({
+                            'symbol': symbol,
+                            'price': closes[-1],
+                            'priceChangePercent': round(price_change_30d, 2),
+                            'volatility30d': round(volatility_30d, 2),
+                            'highPrice': max(closes),
+                            'lowPrice': min(closes),
+                            'volume': avg_volume
+                        })
+                
+                except Exception as e:
+                    # Skip symbols that cause errors (may not have enough data)
+                    continue
+            
+            # Sort by absolute 30-day price change (volatility indicator)
+            volatile_assets.sort(key=lambda x: abs(x['priceChangePercent']), reverse=True)
+            
+            logger.info(f"Found {len(volatile_assets)} volatile assets (30-day analysis)")
+            return volatile_assets
+        
+        except BinanceAPIException as e:
+            logger.error(f"Binance API error getting 30d volatile assets: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error getting 30d volatile assets: {e}")
+            raise
+    
     def get_symbol_info(self, symbol: str) -> Dict[str, Any]:
         """Get symbol information including filters (lot size, step size, etc.)."""
         try:
