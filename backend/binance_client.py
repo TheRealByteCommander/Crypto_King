@@ -170,11 +170,11 @@ class BinanceClientWrapper:
             logger.info("Getting 24h ticker data for initial screening...")
             tickers_24h = self.client.get_ticker()
             
-            # Filter by significant 24h movement first (at least 3% change)
+            # Filter by significant 24h movement first (at least 2% change)
             # This reduces the number of symbols we need to analyze with 30-day data
             significant_tickers = [
                 t for t in tickers_24h 
-                if abs(float(t.get('priceChangePercent', 0))) >= 3.0
+                if abs(float(t.get('priceChangePercent', 0))) >= 2.0
             ]
             
             # Sort by 24h volume and take top 50 for 30-day analysis
@@ -229,8 +229,9 @@ class BinanceClientWrapper:
                     # Use current price from ticker
                     current_price = float(ticker.get('lastPrice', closes[-1]))
                     
-                    # Include if 30-day change is at least 3% or volatility is significant
-                    if abs(price_change_30d) >= 3.0 or volatility_30d >= 2.5:
+                    # Include if 30-day change is at least 2% or volatility is significant (1.5%)
+                    # Lowered thresholds to ensure we get results
+                    if abs(price_change_30d) >= 2.0 or volatility_30d >= 1.5:
                         volatile_assets.append({
                             'symbol': symbol,
                             'price': current_price,
