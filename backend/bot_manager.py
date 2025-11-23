@@ -50,10 +50,19 @@ class TradingBot:
             # Initialize Binance client
             self.binance_client = BinanceClientWrapper()
             
-            # Store configuration
+            # Validate symbol before starting
+            symbol_upper = symbol.upper()
+            is_tradable, error_msg = self.binance_client.is_symbol_tradable(symbol_upper)
+            if not is_tradable:
+                return {
+                    "success": False,
+                    "message": error_msg or f"Symbol {symbol_upper} is not tradable on Binance"
+                }
+            
+            # Store configuration (use validated uppercase symbol)
             self.current_config = {
                 "strategy": strategy,
-                "symbol": symbol,
+                "symbol": symbol_upper,
                 "amount": amount,
                 "started_at": datetime.now(timezone.utc).isoformat()
             }

@@ -151,6 +151,82 @@ class BinanceClientWrapper:
             logger.error(f"Error getting symbol info for {symbol}: {e}")
             return {}
     
+    def get_tradable_symbols(self) -> List[Dict[str, Any]]:
+        """Get all tradable symbols from Binance (USDT pairs only)."""
+        try:
+            exchange_info = self.client.get_exchange_info()
+            tradable_symbols = []
+            
+            for symbol_info in exchange_info['symbols']:
+                # Only include symbols that:
+                # 1. Have status = 'TRADING'
+                # 2. Are SPOT trading type
+                # 3. End with USDT (or can be filtered for other quote assets)
+                if (symbol_info['status'] == 'TRADING' and 
+                    symbol_info['type'] == 'SPOT' and
+                    symbol_info['quoteAsset'] == 'USDT'):
+                    tradable_symbols.append({
+                        'symbol': symbol_info['symbol'],
+                        'baseAsset': symbol_info['baseAsset'],
+                        'quoteAsset': symbol_info['quoteAsset'],
+                        'status': symbol_info['status']
+                    })
+            
+            logger.info(f"Found {len(tradable_symbols)} tradable USDT pairs on Binance")
+            return sorted(tradable_symbols, key=lambda x: x['symbol'])
+        
+        except Exception as e:
+            logger.error(f"Error getting tradable symbols: {e}")
+            return []
+    
+    def is_symbol_tradable(self, symbol: str) -> tuple[bool, Optional[str]]:
+        """
+        Check if a symbol is tradable on Binance.
+        Returns: (is_tradable: bool, error_message: Optional[str])
+        """
+        try:
+            exchange_info = self.client.get_exchange_info()
+            
+            # Find the symbol
+            symbol_upper = symbol.upper()
+            for symbol_info in exchange_info['symbols']:
+                if symbol_info['symbol'] == symbol_upper:
+                    # Check if it's tradable
+                    if symbol_info['status'] != 'TRADING':
+                        return False, f"Symbol {symbol_upper} exists but is not tradable (status: {symbol_info['status']})"
+                    
+                    if symbol_info['type'] != 'SPOT':
+                        return False, f"Symbol {symbol_upper} exists but is not a SPOT trading pair (type: {symbol_info['type']})"
+                    
+                    if symbol_info['quoteAsset'] != 'USDT':
+                        return False, f"Symbol {symbol_upper} exists but is not a USDT pair (quote: {symbol_info['quoteAsset']})"
+                    
+                    # Symbol is valid and tradable
+                    logger.info(f"Symbol {symbol_upper} validated: tradable SPOT USDT pair")
+                    return True, None
+            
+            # Symbol not found - get suggestions
+            all_symbols = [s['symbol'] for s in exchange_info['symbols'] if s['quoteAsset'] == 'USDT']
+            similar = [s for s in all_symbols if symbol_upper in s or s.startswith(symbol_upper[:3])][:5]
+            
+            error_msg = f"Symbol {symbol_upper} not found on Binance"
+            if similar:
+                error_msg += f". Did you mean: {', '.join(similar)}?"
+            else:
+                # Get some popular examples
+                popular = [s for s in all_symbols if s in ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT']]
+                if popular:
+                    error_msg += f". Popular symbols: {', '.join(popular)}"
+            
+            return False, error_msg
+        
+        except BinanceAPIException as e:
+            logger.error(f"Binance API error checking symbol {symbol}: {e}")
+            return False, f"Binance API error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Error checking symbol {symbol}: {e}")
+            return False, f"Error validating symbol: {str(e)}"
+    
     def adjust_quantity_to_lot_size(self, symbol: str, quantity: float) -> float:
         """Adjust quantity to match Binance LOT_SIZE filter requirements."""
         try:

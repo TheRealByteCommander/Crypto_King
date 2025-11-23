@@ -98,6 +98,40 @@ class AgentTools:
                         "required": []
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_tradable_symbols",
+                    "description": "Get all tradable cryptocurrency symbols (USDT pairs) available on Binance. Use this to check which coins/pairs are available for trading, including major cryptos, altcoins, and meme coins.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "search": {
+                                "type": "string",
+                                "description": "Optional: Search filter to find symbols containing this text (e.g., 'DOGE', 'SHIB', 'BTC')"
+                            }
+                        },
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "validate_symbol",
+                    "description": "Validate if a trading symbol exists and is tradable on Binance. Use this before suggesting trades or answering questions about specific cryptocurrencies.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string",
+                                "description": "The trading symbol to validate (e.g., BTCUSDT, DOGEUSDT, SHIBUSDT)"
+                            }
+                        },
+                        "required": ["symbol"]
+                    }
+                }
             }
         ]
     
@@ -362,6 +396,48 @@ class AgentTools:
                     if '_id' in analysis and isinstance(analysis['_id'], ObjectId):
                         analysis['_id'] = str(analysis['_id'])
                 return {"success": True, "count": len(analyses), "analyses": analyses}
+            
+            elif tool_name == "get_tradable_symbols":
+                if self.binance_client is None:
+                    # Try to create a temporary client for this request
+                    try:
+                        temp_client = BinanceClientWrapper()
+                        symbols = temp_client.get_tradable_symbols()
+                        search = parameters.get("search", "").upper()
+                        if search:
+                            symbols = [s for s in symbols if search in s['symbol'] or search in s['baseAsset']]
+                        return {"success": True, "count": len(symbols), "symbols": symbols}
+                    except Exception as e:
+                        return {"error": f"Binance client not available: {str(e)}", "success": False}
+                search = parameters.get("search", "").upper()
+                symbols = self.binance_client.get_tradable_symbols()
+                if search:
+                    symbols = [s for s in symbols if search in s['symbol'] or search in s['baseAsset']]
+                return {"success": True, "count": len(symbols), "symbols": symbols}
+            
+            elif tool_name == "validate_symbol":
+                if self.binance_client is None:
+                    # Try to create a temporary client for this request
+                    try:
+                        temp_client = BinanceClientWrapper()
+                        symbol = parameters.get("symbol", "").upper()
+                        is_tradable, error_msg = temp_client.is_symbol_tradable(symbol)
+                        return {
+                            "success": True,
+                            "symbol": symbol,
+                            "is_tradable": is_tradable,
+                            "message": error_msg if not is_tradable else f"{symbol} is valid and tradable"
+                        }
+                    except Exception as e:
+                        return {"error": f"Binance client not available: {str(e)}", "success": False}
+                symbol = parameters.get("symbol", "").upper()
+                is_tradable, error_msg = self.binance_client.is_symbol_tradable(symbol)
+                return {
+                    "success": True,
+                    "symbol": symbol,
+                    "is_tradable": is_tradable,
+                    "message": error_msg if not is_tradable else f"{symbol} is valid and tradable"
+                }
             
             else:
                 return {"error": f"Unknown tool: {tool_name}", "success": False}

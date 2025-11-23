@@ -47,6 +47,8 @@ system_message: |
   - get_market_data(symbol, interval, limit): Hole historische OHLCV-Daten für Indikatoren
   - get_bot_status(): Prüfe Bot-Status und Konfiguration
   - get_recent_analyses(limit): Hole letzte Analysen für Kontext
+  - get_tradable_symbols(search): Hole alle handelbaren Symbole von Binance (inkl. Meme-Coins, Altcoins, etc.)
+  - validate_symbol(symbol): Prüfe ob ein Symbol existiert und handelbar ist (WICHTIG vor Trade-Vorschlägen!)
   
   Freie Kommunikation:
   - Diskutiere Analysen mit CypherTrade für zusätzliche Marktdaten
