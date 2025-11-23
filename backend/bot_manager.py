@@ -42,6 +42,9 @@ class TradingBot:
         self.is_running = False
         self.current_config = None
         self.task = None
+        self.position = None  # "LONG", "SHORT", or None - tracks current position
+        self.position_size = 0.0  # Quantity of base asset in position
+        self.position_entry_price = 0.0  # Entry price for current position
     
     async def start(self, strategy: str, symbol: str, amount: float, timeframe: str = "5m") -> Dict[str, Any]:
         """Start the trading bot with specified parameters."""
@@ -78,6 +81,9 @@ class TradingBot:
                 "timeframe": timeframe,
                 "started_at": datetime.now(timezone.utc).isoformat()
             }
+            
+            # Initialize position tracking - check if we already have a position in this symbol
+            await self._update_position_from_balance(symbol_upper)
             
             # Save to database with bot_id
             await self.db.bot_config.insert_one(self.current_config)
@@ -350,6 +356,32 @@ class TradingBot:
                 # Wait before retrying
                 await asyncio.sleep(BOT_ERROR_RETRY_DELAY_SECONDS)
     
+    async def _update_position_from_balance(self, symbol: str):
+        """Update position status based on current balance."""
+        try:
+            base_asset = symbol.replace("USDT", "")
+            balance = self.binance_client.get_account_balance(base_asset)
+            
+            if balance > 0:
+                self.position = "LONG"
+                self.position_size = balance
+                # Try to get entry price from last BUY trade for this bot
+                last_buy = await self.db.trades.find_one(
+                    {"bot_id": self.bot_id, "symbol": symbol, "side": "BUY"},
+                    sort=[("timestamp", -1)]
+                )
+                if last_buy:
+                    self.position_entry_price = last_buy.get("entry_price", 0.0)
+            else:
+                self.position = None
+                self.position_size = 0.0
+                self.position_entry_price = 0.0
+        except Exception as e:
+            logger.warning(f"Bot {self.bot_id}: Could not update position from balance: {e}")
+            self.position = None
+            self.position_size = 0.0
+            self.position_entry_price = 0.0
+    
     async def _execute_trade(self, analysis: Dict[str, Any]):
         """Execute a trade based on analysis."""
         try:
@@ -410,13 +442,29 @@ class TradingBot:
                     f"BUY order executed: {quantity} {symbol} at {current_price} USDT (Order ID: {order.get('orderId')})",
                     "trade"
                 )
+                
+                # Update position tracking
+                if self.position == "LONG":
+                    # Add to existing position
+                    self.position_size += quantity
+                    # Update entry price (weighted average)
+                    total_value = (self.position_size - quantity) * self.position_entry_price + quantity * current_price
+                    self.position_entry_price = total_value / self.position_size if self.position_size > 0 else current_price
+                else:
+                    # Open new LONG position
+                    self.position = "LONG"
+                    self.position_size = quantity
+                    self.position_entry_price = current_price
             
             elif signal == "SELL":
-                # Sell all available base asset
+                # Update position status before executing SELL
+                await self._update_position_from_balance(symbol)
+                
                 base_asset = symbol.replace("USDT", "")
                 balance = self.binance_client.get_account_balance(base_asset)
                 
                 if balance > 0:
+                    # We have a LONG position - close it
                     # Adjust quantity to match Binance LOT_SIZE filter requirements
                     quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
                     
@@ -430,6 +478,14 @@ class TradingBot:
                     
                     # Execute order
                     order = self.binance_client.execute_order(symbol, "SELL", quantity)
+                    
+                    # Calculate profit/loss if we had a position
+                    pnl = None
+                    pnl_percent = None
+                    if self.position == "LONG" and self.position_entry_price > 0:
+                        # Calculate realized PnL based on average entry price
+                        pnl = (current_price - self.position_entry_price) * quantity
+                        pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
                     
                     # Save trade to database
                     trade = {
@@ -447,16 +503,43 @@ class TradingBot:
                         "indicators": analysis.get("indicators", {}),
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     }
+                    
+                    if pnl is not None:
+                        trade["pnl"] = pnl
+                        trade["pnl_percent"] = pnl_percent
+                        trade["position_entry_price"] = self.position_entry_price
+                    
                     await self.db.trades.insert_one(trade)
                     
-                    logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {current_price} USDT")
+                    # Update position tracking - position is closed
+                    self.position = None
+                    self.position_size = 0.0
+                    old_entry_price = self.position_entry_price
+                    self.position_entry_price = 0.0
+                    
+                    pnl_msg = ""
+                    if pnl is not None:
+                        pnl_sign = "+" if pnl >= 0 else ""
+                        pnl_msg = f" | P/L: {pnl_sign}{pnl:.2f} USDT ({pnl_percent:+.2f}%)"
+                    
+                    logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {current_price} USDT (Position closed{pnl_msg})")
                     await self.agent_manager.log_agent_message(
                         "CypherTrade",
-                        f"SELL order executed: {quantity} {symbol} at {current_price} USDT (Order ID: {order.get('orderId')})",
+                        f"SELL order executed: {quantity} {symbol} at {current_price} USDT (Position closed{pnl_msg}) (Order ID: {order.get('orderId')})",
                         "trade"
                     )
                 else:
-                    logger.warning(f"Bot {self.bot_id}: No {base_asset} balance available for SELL order")
+                    # No position to close - in Spot Trading, we cannot open a SHORT position
+                    # (would require Margin/Futures trading)
+                    logger.info(f"Bot {self.bot_id}: SELL signal received but no {base_asset} position to close. Spot Trading does not support short positions.")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"SELL signal received but no position to close. Spot Trading only supports closing LONG positions.",
+                        "info"
+                    )
+                    self.position = None
+                    self.position_size = 0.0
+                    self.position_entry_price = 0.0
         
         except Exception as e:
             logger.error(f"Bot {self.bot_id}: Trade execution error: {e}", exc_info=True)
@@ -570,18 +653,50 @@ class TradingBot:
             if self.current_config:
                 config = convert_objectid_to_str(self.current_config.copy())
             
-            return {
+            # Update position from balance if bot is running
+            if self.is_running and self.current_config:
+                await self._update_position_from_balance(self.current_config["symbol"])
+            
+            # Get current price if we have a position
+            current_price = None
+            unrealized_pnl = None
+            unrealized_pnl_percent = None
+            if self.position and self.binance_client and self.current_config:
+                try:
+                    current_price = self.binance_client.get_current_price(self.current_config["symbol"])
+                    if self.position_entry_price > 0 and current_price:
+                        if self.position == "LONG":
+                            unrealized_pnl = (current_price - self.position_entry_price) * self.position_size
+                            unrealized_pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                        elif self.position == "SHORT":
+                            unrealized_pnl = (self.position_entry_price - current_price) * self.position_size
+                            unrealized_pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                except Exception as e:
+                    logger.warning(f"Could not get current price for status: {e}")
+            
+            status = {
                 "bot_id": self.bot_id,
                 "is_running": self.is_running,
                 "config": config,
+                "position": {
+                    "type": self.position,  # "LONG", "SHORT", or None
+                    "size": self.position_size,
+                    "entry_price": self.position_entry_price,
+                    "current_price": current_price,
+                    "unrealized_pnl": unrealized_pnl,
+                    "unrealized_pnl_percent": unrealized_pnl_percent
+                },
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
+            
+            return status
         except Exception as e:
             logger.error(f"Error getting bot status: {e}")
             return {
                 "bot_id": self.bot_id,
                 "is_running": False,
                 "config": None,
+                "position": None,
                 "error": str(e),
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
