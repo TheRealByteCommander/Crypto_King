@@ -272,9 +272,20 @@ class AgentManager:
             context_parts = []
             
             # If price query detected, fetch and include the price
-            if symbol_to_fetch and bot is not None and bot.binance_client is not None:
+            if symbol_to_fetch:
                 try:
-                    current_price = bot.binance_client.get_current_price(symbol_to_fetch)
+                    # Try to use bot's binance_client if available, otherwise create temporary one
+                    from binance_client import BinanceClientWrapper
+                    
+                    if bot is not None and bot.binance_client is not None:
+                        current_price = bot.binance_client.get_current_price(symbol_to_fetch)
+                    elif self.binance_client is not None:
+                        current_price = self.binance_client.get_current_price(symbol_to_fetch)
+                    else:
+                        # Create temporary binance client just to fetch price
+                        temp_client = BinanceClientWrapper()
+                        current_price = temp_client.get_current_price(symbol_to_fetch)
+                    
                     context_parts.append(f"\n[AKTUELLER KURS - {symbol_to_fetch}]")
                     context_parts.append(f"- {symbol_to_fetch}: {current_price} USDT")
                     context_parts.append(f"- Format: 1 {symbol_to_fetch.replace('USDT', '')} = {current_price} USDT")
@@ -283,6 +294,7 @@ class AgentManager:
                     logger.warning(f"Could not auto-fetch price for {symbol_to_fetch}: {e}")
                     context_parts.append(f"\n[WARNUNG]")
                     context_parts.append(f"- Konnte Preis für {symbol_to_fetch} nicht abrufen: {str(e)}")
+                    context_parts.append(f"- Fehler: {str(e)}")
             
             # Add bot status if available
             # Use explicit None check - database objects cannot be used as boolean
