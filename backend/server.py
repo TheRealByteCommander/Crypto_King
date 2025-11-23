@@ -432,9 +432,11 @@ async def get_trades(limit: int = 100):  # Using default from constants would re
     """Get trade history."""
     try:
         trades = await db.trades.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
-        return trades
+        # Convert ObjectIds to strings in case they exist in nested structures
+        cleaned_trades = [convert_objectid_to_str(trade) for trade in trades]
+        return cleaned_trades
     except Exception as e:
-        logger.error(f"Error getting trades: {e}")
+        logger.error(f"Error getting trades: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/logs", response_model=List[AgentLog])
