@@ -300,11 +300,21 @@ async def start_bot(request: BotStartRequest):
         # Convert ObjectId to strings before broadcasting and returning
         clean_result = convert_objectid_to_str(result)
         
-        # Broadcast status update
-        await manager.broadcast({
-            "type": "bot_started",
-            "data": clean_result
-        })
+        # Only broadcast status update if bot started successfully
+        if result["success"]:
+            await manager.broadcast({
+                "type": "bot_started",
+                "data": clean_result,
+                "success": True
+            })
+        else:
+            # Broadcast error message if bot failed to start
+            await manager.broadcast({
+                "type": "bot_start_failed",
+                "data": clean_result,
+                "success": False,
+                "message": result["message"]
+            })
         
         return BotResponse(
             success=result["success"],

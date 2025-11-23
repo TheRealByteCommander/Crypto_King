@@ -70,7 +70,14 @@ const Dashboard = () => {
       if (data.type === "status_update") {
         setBotStatus(data.data);
       } else if (data.type === "bot_started") {
-        toast.success("Bot started successfully!");
+        // Only show success if it was actually successful
+        if (data.success !== false) {
+          toast.success(data.message || "Bot started successfully!");
+        }
+        fetchAllData();
+      } else if (data.type === "bot_start_failed") {
+        // Show error message when bot start failed
+        toast.error(data.message || "Failed to start bot");
         fetchAllData();
       } else if (data.type === "bot_stopped") {
         toast.success("Bot stopped");
