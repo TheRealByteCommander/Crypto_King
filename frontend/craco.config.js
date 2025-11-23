@@ -174,6 +174,22 @@ if (config.enableVisualEdits || config.enableHealthCheck) {
 
     return devServerConfig;
   };
+} else {
+  // Configure dev server for disabled hot reload
+  if (config.disableHotReload || process.env.NODE_ENV === 'production') {
+    webpackConfig.devServer = (devServerConfig) => {
+      // Disable WebSocket and hot reload completely
+      devServerConfig.client = {
+        ...devServerConfig.client,
+        webSocketURL: undefined, // Remove webSocketURL configuration
+        overlay: false, // Disable error overlay
+      };
+      devServerConfig.hot = false; // Disable HMR
+      devServerConfig.liveReload = false; // Disable live reload
+      
+      return devServerConfig;
+    };
+  }
 }
 
 module.exports = webpackConfig;
