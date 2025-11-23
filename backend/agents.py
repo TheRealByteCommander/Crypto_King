@@ -268,6 +268,58 @@ class AgentManager:
                             break
                     break
             
+            # Check if user is requesting a trade (buy/sell)
+            trade_request = None
+            trade_side = None
+            trade_symbol = None
+            trade_quantity = None
+            trade_amount = None
+            
+            # Trade keywords
+            buy_keywords = ["kauf", "kaufe", "kaufen", "buy", "kauft"]
+            sell_keywords = ["verkauf", "verkaufe", "verkaufen", "sell", "verkauft"]
+            
+            # Check for buy/sell commands
+            for keyword in buy_keywords:
+                if keyword in user_lower:
+                    trade_side = "BUY"
+                    # Try to find cryptocurrency and quantity
+                    for crypto_name, symbol in symbol_map.items():
+                        if crypto_name in user_lower:
+                            trade_symbol = symbol
+                            # Try to extract quantity/amount from message
+                            import re
+                            # Look for numbers in the message
+                            numbers = re.findall(r'\d+\.?\d*', user_message)
+                            if numbers:
+                                # If keyword like "für" or "mit" or "$" before number, it's amount in USDT
+                                if any(word in user_lower for word in ["für", "mit", "$", "usdt", "dollar"]):
+                                    trade_amount = float(numbers[0])
+                                else:
+                                    trade_quantity = float(numbers[0])
+                            break
+                    if trade_symbol:
+                        trade_request = f"Der Benutzer möchte {trade_symbol} kaufen."
+                    break
+            
+            if not trade_side:
+                for keyword in sell_keywords:
+                    if keyword in user_lower:
+                        trade_side = "SELL"
+                        # Try to find cryptocurrency and quantity
+                        for crypto_name, symbol in symbol_map.items():
+                            if crypto_name in user_lower:
+                                trade_symbol = symbol
+                                # Try to extract quantity from message
+                                import re
+                                numbers = re.findall(r'\d+\.?\d*', user_message)
+                                if numbers:
+                                    trade_quantity = float(numbers[0])
+                                break
+                        if trade_symbol:
+                            trade_request = f"Der Benutzer möchte {trade_symbol} verkaufen."
+                        break
+            
             # Build context message with real bot status and market data
             context_parts = []
             

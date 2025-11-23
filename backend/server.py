@@ -149,6 +149,21 @@ class BotResponse(BaseModel):
     message: str
     data: Optional[Dict[str, Any]] = None
 
+class ManualTradeRequest(BaseModel):
+    symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT, SOLUSDT)")
+    side: str = Field(..., pattern="^(BUY|SELL)$", description="Order side: BUY or SELL")
+    quantity: Optional[float] = Field(None, description="Quantity to trade (e.g., 0.01 BTC)")
+    amount_usdt: Optional[float] = Field(None, description="Amount in USDT to buy (only for BUY orders)")
+
+class ManualTradeResponse(BaseModel):
+    success: bool
+    message: str
+    order: Optional[Dict[str, Any]] = None
+    symbol: Optional[str] = None
+    side: Optional[str] = None
+    quantity: Optional[float] = None
+    price: Optional[float] = None
+
 class Trade(BaseModel):
     model_config = ConfigDict(extra="ignore")
     symbol: str
@@ -302,6 +317,53 @@ async def start_bot(request: BotStartRequest):
             success=False,
             message=f"Error starting bot: {str(e)}",
             data=None
+        )
+
+@api_router.post("/trade/execute", response_model=ManualTradeResponse)
+async def execute_manual_trade(request: ManualTradeRequest):
+    """Execute a manual trade order."""
+    try:
+        # Ensure bot has binance_client
+        if bot.binance_client is None:
+            # Initialize binance client if bot is not running
+            if not bot.is_running:
+                from binance_client import BinanceClientWrapper
+                bot.binance_client = BinanceClientWrapper()
+            else:
+                return ManualTradeResponse(
+                    success=False,
+                    message="Binance client not available. Please start the bot first.",
+                    order=None
+                )
+        
+        result = await bot.execute_manual_trade(
+            symbol=request.symbol,
+            side=request.side,
+            quantity=request.quantity,
+            amount_usdt=request.amount_usdt
+        )
+        
+        if result["success"]:
+            # Broadcast trade execution
+            await manager.broadcast({
+                "type": "trade_executed",
+                "data": {
+                    "symbol": result.get("symbol"),
+                    "side": result.get("side"),
+                    "quantity": result.get("quantity"),
+                    "price": result.get("price"),
+                    "order": result.get("order")
+                }
+            })
+        
+        return ManualTradeResponse(**result)
+    
+    except Exception as e:
+        logger.error(f"Error executing manual trade: {e}", exc_info=True)
+        return ManualTradeResponse(
+            success=False,
+            message=f"Error executing trade: {str(e)}",
+            order=None
         )
 
 @api_router.post("/bot/stop", response_model=BotResponse)

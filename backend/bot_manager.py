@@ -248,6 +248,100 @@ class TradingBot:
                 "error"
             )
     
+    async def execute_manual_trade(self, symbol: str, side: str, quantity: float = None, amount_usdt: float = None) -> Dict[str, Any]:
+        """Execute a manual trade order (can be called from API)."""
+        try:
+            # Ensure binance_client is available
+            if self.binance_client is None:
+                if not self.is_running:
+                    # If bot is not running, create binance client
+                    self.binance_client = BinanceClientWrapper()
+                else:
+                    return {"success": False, "message": "Binance client not available"}
+            
+            # Get current price
+            current_price = self.binance_client.get_current_price(symbol)
+            
+            # Calculate quantity if not provided
+            if quantity is None:
+                if amount_usdt is None:
+                    return {"success": False, "message": "Either quantity or amount_usdt must be provided"}
+                
+                if side == "BUY":
+                    # Calculate quantity from amount in USDT
+                    balance = self.binance_client.get_account_balance("USDT")
+                    amount_to_use = min(amount_usdt, balance)
+                    quantity = amount_to_use / current_price
+                elif side == "SELL":
+                    # Use amount_usdt as quantity for SELL (if provided)
+                    # Otherwise, sell all available base asset
+                    base_asset = symbol.replace("USDT", "")
+                    balance = self.binance_client.get_account_balance(base_asset)
+                    quantity = min(amount_usdt, balance) if amount_usdt else balance
+            
+            # Round quantity to appropriate decimals
+            quantity = round(quantity, QUANTITY_DECIMAL_PLACES)
+            
+            if quantity <= 0:
+                return {"success": False, "message": f"Insufficient balance for {side} order"}
+            
+            # Validate balance before executing
+            if side == "BUY":
+                balance = self.binance_client.get_account_balance("USDT")
+                required_usdt = quantity * current_price
+                if balance < required_usdt:
+                    return {"success": False, "message": f"Insufficient USDT balance. Required: {required_usdt:.2f}, Available: {balance:.2f}"}
+            elif side == "SELL":
+                base_asset = symbol.replace("USDT", "")
+                balance = self.binance_client.get_account_balance(base_asset)
+                if balance < quantity:
+                    return {"success": False, "message": f"Insufficient {base_asset} balance. Required: {quantity}, Available: {balance}"}
+            
+            # Execute order
+            logger.info(f"Executing manual {side} order: {quantity} {symbol}")
+            order = self.binance_client.execute_order(symbol, side, quantity)
+            
+            # Create a minimal analysis dict for saving trade
+            analysis = {
+                "signal": side,
+                "reason": f"Manual trade requested by user",
+                "confidence": 1.0,
+                "indicators": {"current_price": current_price}
+            }
+            
+            # Save trade to database
+            await self._save_trade(symbol, side, quantity, order, analysis)
+            
+            # Log the trade
+            await self.agent_manager.log_agent_message(
+                "CypherTrade",
+                f"Manual {side} order executed: {quantity} {symbol} at {current_price} USDT",
+                "trade"
+            )
+            
+            # Calculate profit/loss for learning (only for SELL)
+            if side == "SELL":
+                await self._evaluate_and_learn_from_trade(symbol, "SELL", quantity, current_price)
+            
+            return {
+                "success": True,
+                "message": f"{side} order executed successfully",
+                "order": order,
+                "symbol": symbol,
+                "side": side,
+                "quantity": quantity,
+                "price": current_price
+            }
+        
+        except Exception as e:
+            logger.error(f"Error executing manual trade: {e}", exc_info=True)
+            await self.agent_manager.log_agent_message(
+                "CypherTrade",
+                f"Manual trade execution error: {str(e)}",
+                "error"
+            )
+            return {"success": False, "message": f"Error executing trade: {str(e)}"}
+    
     async def _save_trade(self, symbol: str, side: str, quantity: float, order: Dict[str, Any], analysis: Dict[str, Any] = None):
         """Save trade to database and update agent memory."""
         try:
