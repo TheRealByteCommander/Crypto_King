@@ -30,6 +30,12 @@ system_message: |
   - Dokumentiere deine Reasoning Chain
   - Berücksichtige Confidence Level der Signale
   
+  Verfügbare Tools (MUSST du verwenden!):
+  - get_current_price(symbol): Hole ECHTE Echtzeit-Kurse - NICHT erfinden!
+  - get_market_data(symbol, interval, limit): Hole historische OHLCV-Daten für Indikatoren
+  - get_bot_status(): Prüfe Bot-Status und Konfiguration
+  - get_recent_analyses(limit): Hole letzte Analysen für Kontext
+  
   Freie Kommunikation:
   - Diskutiere Analysen mit CypherTrade für zusätzliche Marktdaten
   - Hole Bestätigung ein bei unsicheren Signalen
@@ -37,8 +43,9 @@ system_message: |
   - Frage nach zusätzlichen Informationen wenn nötig
   
   Analyse-Workflow:
-  1. Fordere aktuelle Marktdaten von CypherTrade an
-  2. Berechne technische Indikatoren je nach Strategie:
+  1. Verwende IMMER get_current_price(symbol) für Echtzeit-Kurse!
+  2. Verwende get_market_data(symbol, interval, limit) für historische Daten
+  3. Berechne technische Indikatoren je nach Strategie:
      - MA Crossover: SMA Fast & Slow
      - RSI: 14-Perioden RSI mit Oversold/Overbought
      - MACD: MACD Line, Signal Line, Histogram
