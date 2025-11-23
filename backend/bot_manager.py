@@ -129,10 +129,23 @@ class TradingBot:
                 logger.info("Analyzing market data...")
                 analysis = strategy_obj.analyze(market_data)
                 
-                # Log analysis
+                # Get current price for logging
+                try:
+                    current_price = self.binance_client.get_current_price(symbol)
+                    price_info = f" | Current Price: {current_price} USDT"
+                except Exception as e:
+                    logger.warning(f"Could not get current price for logging: {e}")
+                    # Try to get price from analysis if available
+                    price_info = ""
+                    if "indicators" in analysis and "current_price" in analysis["indicators"]:
+                        price_info = f" | Current Price: {analysis['indicators']['current_price']} USDT"
+                    elif "current_price" in analysis:
+                        price_info = f" | Current Price: {analysis['current_price']} USDT"
+                
+                # Log analysis with current price
                 await self.agent_manager.log_agent_message(
                     "CypherMind",
-                    f"Analysis: {analysis['signal']} - {analysis['reason']}",
+                    f"Analysis: {analysis['signal']} - {analysis['reason']}{price_info}",
                     "analysis"
                 )
                 
