@@ -278,53 +278,101 @@ class AgentManager:
             
             logger.info(f"Checking for trade commands in message: {user_message}")
             
-            # Trade keywords
-            buy_keywords = ["kauf", "kaufe", "kaufen", "buy", "kauft"]
-            sell_keywords = ["verkauf", "verkaufe", "verkaufen", "sell", "verkauft"]
+            # Trade keywords - IMPORTANT: Check SELL first because "verkaufe" contains "kauf"
+            # Use word boundaries to avoid substring matches
+            import re
             
-            # Check for buy/sell commands
-            for keyword in buy_keywords:
-                if keyword in user_lower:
-                    trade_side = "BUY"
+            sell_keywords = ["verkauf", "verkaufe", "verkaufen", "sell", "verkauft"]
+            buy_keywords = ["kauf", "kaufe", "kaufen", "buy", "kauft"]
+            
+            # Check for SELL commands FIRST (before BUY, because "verkaufe" contains "kauf")
+            # Use word boundaries to match whole words only
+            for keyword in sell_keywords:
+                # Use word boundary regex to match whole words only
+                pattern = rf'\b{re.escape(keyword)}\b'
+                if re.search(pattern, user_lower):
+                    trade_side = "SELL"
+                    logger.info(f"SELL keyword detected: '{keyword}' in message")
                     # Try to find cryptocurrency and quantity
                     # First, try to find exact matches in symbol_map
                     for crypto_name, symbol in symbol_map.items():
                         if crypto_name in user_lower:
                             trade_symbol = symbol
-                            # Try to extract quantity/amount from message
-                            import re
-                            # Look for numbers in the message
+                            # Try to extract quantity from message
                             numbers = re.findall(r'\d+\.?\d*', user_message)
                             if numbers:
-                                # If keyword like "für" or "mit" or "$" before number, it's amount in USDT
-                                if any(word in user_lower for word in ["für", "mit", "$", "usdt", "dollar"]):
-                                    trade_amount = float(numbers[0])
-                                else:
-                                    trade_quantity = float(numbers[0])
+                                trade_quantity = float(numbers[0])
+                            else:
+                                # If no quantity specified, sell all available (will be handled in execute_manual_trade)
+                                trade_quantity = None
                             break
                     
                     # If no symbol found yet, try to extract from common patterns
                     if not trade_symbol:
-                        import re
                         # Look for patterns like "den Bitcoin", "die Bitcoin", "Bitcoin", etc.
                         for crypto_name, symbol in symbol_map.items():
                             # Check for "den/die/der [crypto]" or just "[crypto]"
                             pattern = rf'\b(?:den|die|der|das|the)?\s*{crypto_name}\b'
                             if re.search(pattern, user_lower):
                                 trade_symbol = symbol
-                                # Try to extract quantity/amount
+                                # Try to extract quantity
                                 numbers = re.findall(r'\d+\.?\d*', user_message)
                                 if numbers:
+                                    trade_quantity = float(numbers[0])
+                                else:
+                                    trade_quantity = None
+                                break
+                    
+                    if trade_symbol:
+                        trade_request = f"Der Benutzer möchte {trade_symbol} verkaufen."
+                    break
+            
+            # Check for BUY commands (only if no SELL command was detected)
+            if not trade_side:
+                for keyword in buy_keywords:
+                    # Use word boundary regex to match whole words only
+                    pattern = rf'\b{re.escape(keyword)}\b'
+                    if re.search(pattern, user_lower):
+                        trade_side = "BUY"
+                        logger.info(f"BUY keyword detected: '{keyword}' in message")
+                        # Try to find cryptocurrency and quantity
+                        # First, try to find exact matches in symbol_map
+                        for crypto_name, symbol in symbol_map.items():
+                            if crypto_name in user_lower:
+                                trade_symbol = symbol
+                                # Try to extract quantity/amount from message
+                                # Look for numbers in the message
+                                numbers = re.findall(r'\d+\.?\d*', user_message)
+                                if numbers:
+                                    # If keyword like "für" or "mit" or "$" before number, it's amount in USDT
                                     if any(word in user_lower for word in ["für", "mit", "$", "usdt", "dollar"]):
                                         trade_amount = float(numbers[0])
                                     else:
                                         trade_quantity = float(numbers[0])
                                 break
-                    
-                    if trade_symbol:
-                        trade_request = f"Der Benutzer möchte {trade_symbol} kaufen."
-                    break
+                        
+                        # If no symbol found yet, try to extract from common patterns
+                        if not trade_symbol:
+                            # Look for patterns like "den Bitcoin", "die Bitcoin", "Bitcoin", etc.
+                            for crypto_name, symbol in symbol_map.items():
+                                # Check for "den/die/der [crypto]" or just "[crypto]"
+                                pattern = rf'\b(?:den|die|der|das|the)?\s*{crypto_name}\b'
+                                if re.search(pattern, user_lower):
+                                    trade_symbol = symbol
+                                    # Try to extract quantity/amount
+                                    numbers = re.findall(r'\d+\.?\d*', user_message)
+                                    if numbers:
+                                        if any(word in user_lower for word in ["für", "mit", "$", "usdt", "dollar"]):
+                                            trade_amount = float(numbers[0])
+                                        else:
+                                            trade_quantity = float(numbers[0])
+                                    break
+                        
+                        if trade_symbol:
+                            trade_request = f"Der Benutzer möchte {trade_symbol} kaufen."
+                        break
             
+            # Legacy check (keep for backwards compatibility, but should not be reached if word boundaries work)
             if not trade_side:
                 for keyword in sell_keywords:
                     if keyword in user_lower:
