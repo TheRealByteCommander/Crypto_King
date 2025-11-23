@@ -135,7 +135,7 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                         ID: {bot.botId.substring(0, 8)}...
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm mb-4">
                       <div>
                         <p className="text-slate-400 mb-1">Strategy</p>
                         <p className="text-slate-100 font-medium mono">
@@ -167,6 +167,62 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                         </p>
                       </div>
                     </div>
+                    
+                    {/* Asset Information */}
+                    {bot.asset && bot.asset.quantity > 0 ? (
+                      <div className="bg-slate-900/50 rounded-lg p-3 border border-indigo-500/20">
+                        <p className="text-slate-400 text-xs mb-2">Current Asset</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-slate-500 text-xs mb-1">Asset</p>
+                            <p className="text-slate-100 font-bold">{bot.asset.asset}</p>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-xs mb-1">Quantity</p>
+                            <p className="text-slate-100 font-mono">
+                              {bot.asset.quantity.toLocaleString('de-DE', { 
+                                minimumFractionDigits: 2, 
+                                maximumFractionDigits: 8 
+                              })}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-xs mb-1">Value</p>
+                            <p className="text-slate-100 font-mono font-semibold">
+                              ${bot.asset.value_usdt?.toLocaleString('de-DE', { 
+                                minimumFractionDigits: 2, 
+                                maximumFractionDigits: 2 
+                              }) || "0.00"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-xs mb-1">Position</p>
+                            <p className={`font-medium ${
+                              bot.position?.type === "LONG" 
+                                ? "text-green-400" 
+                                : bot.position?.type === "SHORT"
+                                ? "text-red-400"
+                                : "text-slate-400"
+                            }`}>
+                              {bot.position?.type || "None"}
+                            </p>
+                            {bot.position?.unrealized_pnl !== null && bot.position?.unrealized_pnl !== undefined && (
+                              <p className={`text-xs font-mono ${
+                                bot.position.unrealized_pnl >= 0 ? "text-green-400" : "text-red-400"
+                              }`}>
+                                {bot.position.unrealized_pnl >= 0 ? "+" : ""}
+                                ${bot.position.unrealized_pnl.toFixed(2)} 
+                                ({bot.position.unrealized_pnl_percent >= 0 ? "+" : ""}{bot.position.unrealized_pnl_percent?.toFixed(2)}%)
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-900/30 rounded-lg p-3 border border-slate-700/50">
+                        <p className="text-slate-500 text-xs">No assets held</p>
+                      </div>
+                    )}
                   </div>
                   <Button
                     onClick={() => handleStop(bot.botId)}

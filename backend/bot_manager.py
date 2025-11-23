@@ -858,24 +858,46 @@ class TradingBot:
             
             # Update position from balance if bot is running
             if self.is_running and self.current_config:
-                await self._update_position_from_balance(self.current_config["symbol"])
+                trading_mode = self.current_config.get("trading_mode", "SPOT")
+                await self._update_position_from_balance(self.current_config["symbol"], trading_mode)
             
-            # Get current price if we have a position
+            # Get current price and calculate asset info if we have a position
             current_price = None
             unrealized_pnl = None
             unrealized_pnl_percent = None
-            if self.position and self.binance_client and self.current_config:
+            asset_info = None
+            
+            if self.position and self.position_size > 0 and self.binance_client and self.current_config:
                 try:
-                    current_price = self.binance_client.get_current_price(self.current_config["symbol"])
-                    if self.position_entry_price > 0 and current_price:
-                        if self.position == "LONG":
-                            unrealized_pnl = (current_price - self.position_entry_price) * self.position_size
-                            unrealized_pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
-                        elif self.position == "SHORT":
-                            unrealized_pnl = (self.position_entry_price - current_price) * self.position_size
-                            unrealized_pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                    symbol = self.current_config["symbol"]
+                    current_price = self.binance_client.get_current_price(symbol)
+                    
+                    # Extract base asset from symbol (e.g., BTCUSDT -> BTC)
+                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    
+                    if current_price:
+                        value_usdt = self.position_size * current_price
+                        
+                        if self.position_entry_price > 0:
+                            if self.position == "LONG":
+                                unrealized_pnl = (current_price - self.position_entry_price) * self.position_size
+                                unrealized_pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                            elif self.position == "SHORT":
+                                unrealized_pnl = (self.position_entry_price - current_price) * self.position_size
+                                unrealized_pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                        
+                        asset_info = {
+                            "asset": base_asset,
+                            "symbol": symbol,
+                            "quantity": round(self.position_size, 8),
+                            "value_usdt": round(value_usdt, 2),
+                            "entry_price": round(self.position_entry_price, 6) if self.position_entry_price > 0 else None,
+                            "current_price": round(current_price, 6),
+                            "position_type": self.position
+                        }
+                        
                 except Exception as e:
-                    logger.warning(f"Could not get current price for status: {e}")
+                    logger.warning(f"Could not get asset info for status: {e}")
             
             status = {
                 "bot_id": self.bot_id,
@@ -883,12 +905,13 @@ class TradingBot:
                 "config": config,
                 "position": {
                     "type": self.position,  # "LONG", "SHORT", or None
-                    "size": self.position_size,
-                    "entry_price": self.position_entry_price,
-                    "current_price": current_price,
-                    "unrealized_pnl": unrealized_pnl,
-                    "unrealized_pnl_percent": unrealized_pnl_percent
+                    "size": round(self.position_size, 8) if self.position_size > 0 else 0.0,
+                    "entry_price": round(self.position_entry_price, 6) if self.position_entry_price > 0 else None,
+                    "current_price": round(current_price, 6) if current_price else None,
+                    "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
+                    "unrealized_pnl_percent": round(unrealized_pnl_percent, 2) if unrealized_pnl_percent is not None else None
                 },
+                "asset": asset_info,  # Asset information if holding a position
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
