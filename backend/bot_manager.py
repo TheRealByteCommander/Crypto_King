@@ -124,6 +124,159 @@ class TradingBot:
             logger.error(f"Error stopping bot: {e}")
             return {"success": False, "message": str(e)}
     
+    async def _analyze_historical_market_context(self, symbol: str, strategy: str):
+        """Analyze historical market data to provide context before bot starts trading."""
+        try:
+            logger.info(f"Analyzing historical market context for {symbol}...")
+            
+            # Get multiple timeframes for comprehensive analysis
+            intervals_and_limits = [
+                ("5m", 100),   # Last ~8 hours (5min intervals)
+                ("15m", 100),  # Last ~25 hours (15min intervals)
+                ("1h", 100),   # Last ~4 days (1h intervals)
+                ("4h", 100),   # Last ~17 days (4h intervals)
+                ("1d", 30)     # Last 30 days
+            ]
+            
+            market_context = {
+                "symbol": symbol,
+                "strategy": strategy,
+                "current_price": None,
+                "price_trends": {},
+                "volatility_analysis": {},
+                "volume_analysis": {},
+                "historical_signals": [],
+                "recommendation": None
+            }
+            
+            # Get current price
+            try:
+                current_price = self.binance_client.get_current_price(symbol)
+                market_context["current_price"] = current_price
+            except Exception as e:
+                logger.warning(f"Could not get current price for context analysis: {e}")
+            
+            # Analyze each timeframe
+            strategy_obj = get_strategy(strategy)
+            all_analyses = []
+            
+            for interval, limit in intervals_and_limits:
+                try:
+                    # Get market data for this timeframe
+                    market_data = self.binance_client.get_market_data(symbol, interval=interval, limit=limit)
+                    
+                    # Analyze with strategy
+                    analysis = strategy_obj.analyze(market_data)
+                    all_analyses.append({
+                        "interval": interval,
+                        "analysis": analysis
+                    })
+                    
+                    # Calculate additional metrics
+                    df = market_data
+                    price_change_pct = ((df.iloc[-1]['close'] - df.iloc[0]['close']) / df.iloc[0]['close']) * 100
+                    volatility = df['close'].std() / df['close'].mean() * 100
+                    avg_volume = df['volume'].mean()
+                    
+                    market_context["price_trends"][interval] = {
+                        "price_change_pct": round(price_change_pct, 2),
+                        "volatility": round(volatility, 2),
+                        "avg_volume": round(avg_volume, 2),
+                        "signal": analysis.get("signal", "HOLD"),
+                        "confidence": analysis.get("confidence", 0.0)
+                    }
+                    
+                except Exception as e:
+                    logger.warning(f"Could not analyze {interval} timeframe: {e}")
+                    continue
+            
+            # Overall market context summary
+            if all_analyses:
+                # Count signals across timeframes
+                buy_signals = sum(1 for a in all_analyses if a["analysis"].get("signal") == "BUY")
+                sell_signals = sum(1 for a in all_analyses if a["analysis"].get("signal") == "SELL")
+                hold_signals = sum(1 for a in all_analyses if a["analysis"].get("signal") == "HOLD")
+                
+                # Calculate average confidence
+                confidences = [a["analysis"].get("confidence", 0.0) for a in all_analyses]
+                avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+                
+                # Determine overall recommendation
+                if buy_signals > sell_signals and buy_signals > hold_signals:
+                    recommendation = f"Bullish trend detected across {buy_signals}/{len(all_analyses)} timeframes"
+                elif sell_signals > buy_signals and sell_signals > hold_signals:
+                    recommendation = f"Bearish trend detected across {sell_signals}/{len(all_analyses)} timeframes"
+                else:
+                    recommendation = f"Mixed signals across timeframes - {buy_signals} BUY, {sell_signals} SELL, {hold_signals} HOLD"
+                
+                market_context["recommendation"] = recommendation
+                market_context["signal_summary"] = {
+                    "buy_signals": buy_signals,
+                    "sell_signals": sell_signals,
+                    "hold_signals": hold_signals,
+                    "avg_confidence": round(avg_confidence, 2)
+                }
+                
+                # Get price range analysis
+                try:
+                    daily_data = self.binance_client.get_market_data(symbol, interval="1d", limit=30)
+                    market_context["price_range"] = {
+                        "30d_high": float(daily_data['high'].max()),
+                        "30d_low": float(daily_data['low'].min()),
+                        "30d_range_pct": round(((daily_data['high'].max() - daily_data['low'].min()) / daily_data['low'].min()) * 100, 2)
+                    }
+                    
+                    # Current price position in range
+                    if current_price:
+                        price_position = ((current_price - market_context["price_range"]["30d_low"]) / 
+                                        (market_context["price_range"]["30d_high"] - market_context["price_range"]["30d_low"])) * 100
+                        market_context["price_range"]["current_position_pct"] = round(price_position, 2)
+                except Exception as e:
+                    logger.warning(f"Could not calculate price range: {e}")
+            
+            # Log comprehensive market context to CypherMind
+            context_message = f"Historical Market Analysis for {symbol}:\n"
+            context_message += f"Current Price: {market_context.get('current_price', 'N/A')} USDT\n"
+            context_message += f"Overall Recommendation: {market_context.get('recommendation', 'No clear trend')}\n"
+            
+            if "signal_summary" in market_context:
+                summary = market_context["signal_summary"]
+                context_message += f"Signal Summary: {summary['buy_signals']} BUY, {summary['sell_signals']} SELL, {summary['hold_signals']} HOLD (Avg Confidence: {summary['avg_confidence']})\n"
+            
+            if "price_range" in market_context:
+                price_range = market_context["price_range"]
+                context_message += f"30-Day Range: {price_range.get('30d_low', 'N/A')} - {price_range.get('30d_high', 'N/A')} USDT ({price_range.get('30d_range_pct', 0)}% range)\n"
+                if "current_position_pct" in price_range:
+                    context_message += f"Current Price Position: {price_range['current_position_pct']}% of 30-day range\n"
+            
+            context_message += "\nTimeframe Analysis:\n"
+            for interval, trend_data in market_context.get("price_trends", {}).items():
+                context_message += f"  {interval}: {trend_data['signal']} signal, {trend_data['price_change_pct']}% price change, {trend_data['volatility']}% volatility\n"
+            
+            await self.agent_manager.log_agent_message(
+                "CypherMind",
+                context_message,
+                "analysis"
+            )
+            
+            # Store market context in memory for CypherMind
+            cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
+            await cyphermind_memory.store_memory(
+                memory_type="market_context",
+                content=market_context,
+                metadata={"symbol": symbol, "strategy": strategy, "type": "startup_analysis"}
+            )
+            
+            logger.info(f"Historical market analysis completed for {symbol}")
+            
+        except Exception as e:
+            logger.error(f"Error analyzing historical market context: {e}", exc_info=True)
+            await self.agent_manager.log_agent_message(
+                "CypherMind",
+                f"Warning: Could not complete historical market analysis: {str(e)}",
+                "error"
+            )
+    
     async def _bot_loop(self):
         """Main bot loop that runs the trading strategy."""
         logger.info("Starting bot loop...")
