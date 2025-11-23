@@ -284,6 +284,7 @@ class AgentManager:
                 if keyword in user_lower:
                     trade_side = "BUY"
                     # Try to find cryptocurrency and quantity
+                    # First, try to find exact matches in symbol_map
                     for crypto_name, symbol in symbol_map.items():
                         if crypto_name in user_lower:
                             trade_symbol = symbol
@@ -298,6 +299,25 @@ class AgentManager:
                                 else:
                                     trade_quantity = float(numbers[0])
                             break
+                    
+                    # If no symbol found yet, try to extract from common patterns
+                    if not trade_symbol:
+                        import re
+                        # Look for patterns like "den Bitcoin", "die Bitcoin", "Bitcoin", etc.
+                        for crypto_name, symbol in symbol_map.items():
+                            # Check for "den/die/der [crypto]" or just "[crypto]"
+                            pattern = rf'\b(?:den|die|der|das|the)?\s*{crypto_name}\b'
+                            if re.search(pattern, user_lower):
+                                trade_symbol = symbol
+                                # Try to extract quantity/amount
+                                numbers = re.findall(r'\d+\.?\d*', user_message)
+                                if numbers:
+                                    if any(word in user_lower for word in ["für", "mit", "$", "usdt", "dollar"]):
+                                        trade_amount = float(numbers[0])
+                                    else:
+                                        trade_quantity = float(numbers[0])
+                                break
+                    
                     if trade_symbol:
                         trade_request = f"Der Benutzer möchte {trade_symbol} kaufen."
                     break
@@ -307,6 +327,7 @@ class AgentManager:
                     if keyword in user_lower:
                         trade_side = "SELL"
                         # Try to find cryptocurrency and quantity
+                        # First, try to find exact matches in symbol_map
                         for crypto_name, symbol in symbol_map.items():
                             if crypto_name in user_lower:
                                 trade_symbol = symbol
@@ -315,7 +336,28 @@ class AgentManager:
                                 numbers = re.findall(r'\d+\.?\d*', user_message)
                                 if numbers:
                                     trade_quantity = float(numbers[0])
+                                else:
+                                    # If no quantity specified, sell all available (will be handled in execute_manual_trade)
+                                    trade_quantity = None
                                 break
+                        
+                        # If no symbol found yet, try to extract from common patterns
+                        if not trade_symbol:
+                            import re
+                            # Look for patterns like "den Bitcoin", "die Bitcoin", "Bitcoin", etc.
+                            for crypto_name, symbol in symbol_map.items():
+                                # Check for "den/die/der [crypto]" or just "[crypto]"
+                                pattern = rf'\b(?:den|die|der|das|the)?\s*{crypto_name}\b'
+                                if re.search(pattern, user_lower):
+                                    trade_symbol = symbol
+                                    # Try to extract quantity
+                                    numbers = re.findall(r'\d+\.?\d*', user_message)
+                                    if numbers:
+                                        trade_quantity = float(numbers[0])
+                                    else:
+                                        trade_quantity = None
+                                    break
+                        
                         if trade_symbol:
                             trade_request = f"Der Benutzer möchte {trade_symbol} verkaufen."
                         break
