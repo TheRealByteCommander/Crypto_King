@@ -142,6 +142,7 @@ class BotStartRequest(BaseModel):
     strategy: str = "ma_crossover"
     symbol: str = "BTCUSDT"
     amount: float = 100.0
+    bot_id: Optional[str] = None  # If not provided, creates new bot
 
 class BotResponse(BaseModel):
     success: bool
@@ -296,7 +297,8 @@ async def start_bot(request: BotStartRequest):
     """Start a trading bot (creates new bot if bot_id not provided)."""
     try:
         # Get or create bot instance
-        bot = bot_manager.get_bot(request.bot_id)
+        bot_id = getattr(request, 'bot_id', None)  # Safe access with default None
+        bot = bot_manager.get_bot(bot_id)
         
         # Check if bot is already running
         if bot.is_running:
