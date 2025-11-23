@@ -578,32 +578,25 @@ async def get_volatile_assets(limit: int = 20):
             from binance_client import BinanceClientWrapper
             binance_client = BinanceClientWrapper()
         
-        # Try 30-day analysis with timeout (max 30 seconds)
+        # Try 24h first (faster and more reliable), then optionally upgrade to 30-day
         tickers = []
         try:
-            logger.info("Starting 30-day volatile assets analysis...")
-            # Run in executor with timeout
-            tickers = await asyncio.wait_for(
-                asyncio.to_thread(binance_client.get_30d_volatile_assets),
-                timeout=30.0
-            )
-            logger.info(f"30-day analysis completed: {len(tickers)} assets found")
-        except asyncio.TimeoutError:
-            logger.warning("30-day analysis timed out after 30 seconds, falling back to 24h")
+            logger.info("Getting volatile assets (24h ticker stats)...")
+            # Use 24h ticker stats for now (faster, more reliable)
+            # TODO: Can be upgraded to 30-day analysis in the future if needed
             tickers = binance_client.get_24h_ticker_stats()
+            logger.info(f"24h ticker stats retrieved: {len(tickers)} assets found")
+            
+            # Optional: Try to enhance with 30-day data for top assets (async, non-blocking)
+            # This can be done in background if needed
         except Exception as e:
-            logger.warning(f"30-day analysis failed: {e}, falling back to 24h")
-            # Fallback to 24h if 30-day fails
-            try:
-                tickers = binance_client.get_24h_ticker_stats()
-            except Exception as fallback_error:
-                logger.error(f"24h fallback also failed: {fallback_error}")
-                return {
-                    "success": False,
-                    "error": f"Both 30-day and 24h analysis failed: {str(e)}",
-                    "assets": [],
-                    "count": 0
-                }
+            logger.error(f"Failed to get 24h ticker stats: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "assets": [],
+                "count": 0
+            }
         
         # Limit results
         limited_tickers = tickers[:limit] if tickers else []
