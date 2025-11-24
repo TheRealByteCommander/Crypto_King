@@ -475,36 +475,71 @@ class TradingBot:
                     )
                     return
                 
-                # Use available amount (not full configured amount)
-                amount_usdt = min(available_amount, configured_amount)
-                logger.info(f"Bot {self.bot_id}: Amount check - Total spent: {total_spent:.2f} USDT, Available: {amount_usdt:.2f} USDT, Limit: {configured_amount:.2f} USDT")
-                
-                # Get current price
+                # Get current price first
                 current_price = self.binance_client.get_current_price(symbol)
                 
-                # Calculate quantity
-                quantity = amount_usdt / current_price
-                
-                # Adjust quantity to match Binance LOT_SIZE filter requirements
-                quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
-                
-                # Adjust quantity to meet MIN_NOTIONAL filter requirements
-                adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
-                if adjusted_quantity is None:
-                    logger.warning(f"Bot {self.bot_id}: Order value too small for {symbol}, skipping trade")
-                    return
-                quantity = adjusted_quantity
-                
-                # Validate balance
+                # Get trading mode
                 trading_mode = self.current_config.get("trading_mode", "SPOT")
-                balance = self.binance_client.get_account_balance("USDT", trading_mode)
-                required_usdt = quantity * current_price
-                if balance < required_usdt:
-                    logger.warning(f"Bot {self.bot_id}: Insufficient USDT balance ({trading_mode}). Required: {required_usdt:.2f}, Available: {balance:.2f}")
+                
+                # Use intelligent quantity calculation that considers:
+                # - Available budget (remaining amount)
+                # - Available balance
+                # - Binance filters (LOT_SIZE, MIN_NOTIONAL)
+                quantity = self.binance_client.calculate_optimal_order_quantity(
+                    symbol=symbol,
+                    available_budget_usdt=available_amount,
+                    current_price=current_price,
+                    trading_mode=trading_mode
+                )
+                
+                if quantity is None or quantity <= 0:
+                    # Get symbol info for better error message
+                    symbol_info = self.binance_client.get_symbol_info(symbol)
+                    min_notional = symbol_info.get('min_notional', 10.0)
+                    balance = self.binance_client.get_account_balance("USDT", trading_mode)
+                    
+                    error_msg = f"⚠️ Cannot execute BUY order for {symbol}. "
+                    if available_amount < min_notional:
+                        error_msg += f"Available budget {available_amount:.2f} USDT is below minimum notional {min_notional:.2f} USDT. "
+                    if balance < min_notional:
+                        error_msg += f"Balance {balance:.2f} USDT is below minimum notional {min_notional:.2f} USDT. "
+                    error_msg += f"(Total spent: {total_spent:.2f}/{configured_amount:.2f} USDT)"
+                    
+                    logger.warning(f"Bot {self.bot_id}: {error_msg}")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        error_msg,
+                        "warning"
+                    )
                     return
+                
+                # Final quantity validation
+                final_order_value = quantity * current_price
+                balance = self.binance_client.get_account_balance("USDT", trading_mode)
+                
+                # Double-check balance
+                if balance < final_order_value:
+                    logger.warning(f"Bot {self.bot_id}: Insufficient USDT balance ({trading_mode}). Required: {final_order_value:.2f}, Available: {balance:.2f}")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"⚠️ Insufficient USDT balance. Required: {final_order_value:.2f} USDT, Available: {balance:.2f} USDT. Skipping BUY trade.",
+                        "warning"
+                    )
+                    return
+                
+                # Double-check budget limit
+                if final_order_value > available_amount:
+                    logger.warning(f"Bot {self.bot_id}: Order value {final_order_value:.2f} USDT exceeds available budget {available_amount:.2f} USDT")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"⚠️ Order value {final_order_value:.2f} USDT exceeds available budget {available_amount:.2f} USDT. Skipping BUY trade.",
+                        "warning"
+                    )
+                    return
+                
+                logger.info(f"Bot {self.bot_id}: Executing BUY order - Quantity: {quantity}, Value: {final_order_value:.2f} USDT, Budget: {total_spent:.2f}/{configured_amount:.2f} USDT (Remaining: {available_amount - final_order_value:.2f} USDT)")
                 
                 # Execute order
-                trading_mode = self.current_config.get("trading_mode", "SPOT")
                 order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                 
                 # Save trade to database
@@ -562,20 +597,44 @@ class TradingBot:
                     base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
                     balance = self.binance_client.get_account_balance(base_asset, trading_mode)
                     
-                    if balance > 0:
-                        # Adjust quantity to match Binance LOT_SIZE filter requirements
+                    if balance <= 0:
+                        logger.warning(f"Bot {self.bot_id}: No {base_asset} balance to sell. Balance: {balance}")
+                        return
+                    
+                    # Get current price
+                    current_price = self.binance_client.get_current_price(symbol)
+                    
+                    # Adjust quantity to match Binance LOT_SIZE filter requirements
+                    quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
+                    
+                    # Adjust quantity to meet MIN_NOTIONAL filter requirements
+                    # No budget limit for SELL orders (we're selling what we have)
+                    adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                    if adjusted_quantity is None:
+                        # Check if the order value is too small
+                        order_value = quantity * current_price
+                        symbol_info = self.binance_client.get_symbol_info(symbol)
+                        min_notional = symbol_info.get('min_notional', 10.0)
+                        
+                        error_msg = f"⚠️ Cannot execute SELL order for {symbol}. Order value {order_value:.2f} USDT is below minimum notional {min_notional:.2f} USDT. "
+                        error_msg += f"Available balance: {balance} {base_asset}."
+                        
+                        logger.warning(f"Bot {self.bot_id}: {error_msg}")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            error_msg,
+                            "warning"
+                        )
+                        return
+                    quantity = adjusted_quantity
+                    
+                    # Final check: ensure we're not trying to sell more than we have
+                    if quantity > balance:
                         quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
-                        
-                        # Adjust quantity to meet MIN_NOTIONAL filter requirements
-                        current_price = self.binance_client.get_current_price(symbol)
-                        adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
-                        if adjusted_quantity is None:
-                            logger.warning(f"Bot {self.bot_id}: Order value too small for {symbol}, skipping trade")
-                            return
-                        quantity = adjusted_quantity
-                        
-                        # Execute order
-                        order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
+                        logger.info(f"Bot {self.bot_id}: Adjusted quantity to available balance: {quantity} {base_asset}")
+                    
+                    # Execute order
+                    order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
                         
                         # Calculate profit/loss
                         pnl = None
@@ -744,6 +803,15 @@ class TradingBot:
                             "info"
                         )
         
+        except ValueError as e:
+            # Specific validation errors (e.g., NOTIONAL, balance issues)
+            error_msg = str(e)
+            logger.warning(f"Bot {self.bot_id}: Trade execution validation error: {error_msg}")
+            await self.agent_manager.log_agent_message(
+                "CypherTrade",
+                f"⚠️ Trade validation error: {error_msg}",
+                "warning"
+            )
         except Exception as e:
             logger.error(f"Bot {self.bot_id}: Trade execution error: {e}", exc_info=True)
             await self.agent_manager.log_agent_message(

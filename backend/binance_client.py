@@ -211,8 +211,25 @@ class BinanceClientWrapper:
             }
         
         except BinanceAPIException as e:
-            logger.error(f"Binance API error executing order: {e}")
-            raise
+            error_code = e.code if hasattr(e, 'code') else None
+            error_msg = str(e)
+            
+            # Handle specific error codes
+            if error_code == -1013:
+                # MIN_NOTIONAL or LOT_SIZE filter failure
+                logger.error(f"Binance API error -1013 (Filter failure): {error_msg}")
+                raise ValueError(f"Order failed filter validation: {error_msg}. This usually means the order value is too small (MIN_NOTIONAL) or quantity doesn't match LOT_SIZE requirements.")
+            elif error_code == -2010:
+                # Insufficient balance
+                logger.error(f"Binance API error -2010 (Insufficient balance): {error_msg}")
+                raise ValueError(f"Insufficient balance: {error_msg}")
+            elif error_code == -2011:
+                # Unknown order sent
+                logger.error(f"Binance API error -2011 (Unknown order): {error_msg}")
+                raise ValueError(f"Order not found or already filled: {error_msg}")
+            else:
+                logger.error(f"Binance API error (code {error_code}): {error_msg}")
+                raise
         except Exception as e:
             logger.error(f"Error executing order: {e}")
             raise
@@ -534,10 +551,17 @@ class BinanceClientWrapper:
             # Fallback to default rounding
             return round(quantity, 6)
     
-    def adjust_quantity_to_notional(self, symbol: str, quantity: float, price: float) -> Optional[float]:
+    def adjust_quantity_to_notional(self, symbol: str, quantity: float, price: float, max_value_usdt: Optional[float] = None) -> Optional[float]:
         """
         Adjust quantity to meet Binance MIN_NOTIONAL filter requirements.
+        Takes into account maximum allowed value in USDT (for budget limits).
         Returns adjusted quantity or None if notional requirement cannot be met.
+        
+        Args:
+            symbol: Trading symbol
+            quantity: Initial quantity
+            price: Current price
+            max_value_usdt: Maximum allowed order value in USDT (optional, for budget limits)
         """
         try:
             symbol_info = self.get_symbol_info(symbol)
@@ -552,11 +576,33 @@ class BinanceClientWrapper:
             
             # Check if current notional meets minimum
             if current_notional >= min_notional:
+                # Check if within budget limit (if specified)
+                if max_value_usdt is not None and current_notional > max_value_usdt:
+                    # Quantity would exceed budget - reduce it
+                    logger.warning(f"Order value {current_notional:.2f} exceeds budget limit {max_value_usdt:.2f} USDT, adjusting quantity")
+                    max_quantity = max_value_usdt / price
+                    adjusted_qty = self.adjust_quantity_to_lot_size(symbol, max_quantity)
+                    adjusted_notional = adjusted_qty * price
+                    
+                    # Check if adjusted quantity still meets notional
+                    if adjusted_notional < min_notional:
+                        logger.warning(f"Cannot meet notional requirement {min_notional:.2f} within budget limit {max_value_usdt:.2f} USDT")
+                        return None
+                    
+                    logger.info(f"Notional check passed with budget constraint: {adjusted_notional:.2f} USDT (limit: {max_value_usdt:.2f})")
+                    return adjusted_qty
+                
                 logger.info(f"Notional check passed for {symbol}: {current_notional:.2f} >= {min_notional:.2f}")
                 return quantity
             
             # Need to increase quantity to meet notional requirement
             required_quantity = min_notional / price
+            
+            # Check if required quantity would exceed budget (if specified)
+            required_notional = required_quantity * price
+            if max_value_usdt is not None and required_notional > max_value_usdt:
+                logger.warning(f"Cannot meet notional requirement {min_notional:.2f} USDT: would need {required_notional:.2f} USDT but budget limit is {max_value_usdt:.2f} USDT")
+                return None
             
             logger.info(f"Notional check failed for {symbol}: {current_notional:.2f} < {min_notional:.2f}, adjusting quantity from {quantity} to {required_quantity}")
             
@@ -576,6 +622,11 @@ class BinanceClientWrapper:
                     # Try adding one more step
                     adjusted_qty = adjusted_qty + step_size
                     adjusted_notional = adjusted_qty * price
+                    
+                    # Check budget limit again after step increase
+                    if max_value_usdt is not None and adjusted_notional > max_value_usdt:
+                        logger.warning(f"Adjusted quantity {adjusted_notional:.2f} USDT exceeds budget limit {max_value_usdt:.2f} USDT")
+                        return None
                 
                 if adjusted_notional < min_notional:
                     logger.warning(f"Cannot meet notional requirement for {symbol}: required {min_notional:.2f}, would be {adjusted_notional:.2f}")
@@ -587,3 +638,64 @@ class BinanceClientWrapper:
         except Exception as e:
             logger.error(f"Error adjusting quantity to notional for {symbol}: {e}")
             return quantity  # Return original quantity on error
+    
+    def calculate_optimal_order_quantity(self, symbol: str, available_budget_usdt: float, 
+                                        current_price: float, trading_mode: str = "SPOT") -> Optional[float]:
+        """
+        Calculate optimal order quantity considering:
+        - Available budget in USDT
+        - Binance LOT_SIZE filter
+        - Binance MIN_NOTIONAL filter
+        - Available balance
+        
+        Returns optimal quantity or None if order cannot be executed.
+        """
+        try:
+            # Get available balance
+            balance_usdt = self.get_account_balance("USDT", trading_mode)
+            
+            # Use the minimum of budget and balance
+            max_usable_amount = min(available_budget_usdt, balance_usdt)
+            
+            if max_usable_amount <= 0:
+                logger.warning(f"No available budget or balance. Budget: {available_budget_usdt:.2f}, Balance: {balance_usdt:.2f}")
+                return None
+            
+            # Get symbol info for filters
+            symbol_info = self.get_symbol_info(symbol)
+            min_notional = symbol_info.get('min_notional', 10.0)  # Default to 10 USDT if not found
+            
+            # Check if available amount meets minimum notional
+            if max_usable_amount < min_notional:
+                logger.warning(f"Available amount {max_usable_amount:.2f} USDT is below minimum notional {min_notional:.2f} USDT for {symbol}")
+                return None
+            
+            # Calculate quantity from available amount
+            quantity = max_usable_amount / current_price
+            
+            # Adjust to lot size
+            quantity = self.adjust_quantity_to_lot_size(symbol, quantity)
+            
+            # Adjust to meet notional requirement (with budget constraint)
+            adjusted_quantity = self.adjust_quantity_to_notional(symbol, quantity, current_price, max_value_usdt=max_usable_amount)
+            
+            if adjusted_quantity is None:
+                logger.warning(f"Cannot calculate valid quantity for {symbol} with budget {max_usable_amount:.2f} USDT")
+                return None
+            
+            # Final check: ensure notional is met and within budget
+            final_notional = adjusted_quantity * current_price
+            if final_notional < min_notional:
+                logger.warning(f"Final quantity {adjusted_quantity} results in notional {final_notional:.2f} below minimum {min_notional:.2f}")
+                return None
+            
+            if final_notional > max_usable_amount:
+                logger.warning(f"Final quantity {adjusted_quantity} results in notional {final_notional:.2f} above available {max_usable_amount:.2f}")
+                return None
+            
+            logger.info(f"Optimal quantity for {symbol}: {adjusted_quantity} (value: {final_notional:.2f} USDT, budget: {max_usable_amount:.2f} USDT)")
+            return adjusted_quantity
+            
+        except Exception as e:
+            logger.error(f"Error calculating optimal order quantity for {symbol}: {e}")
+            return None
