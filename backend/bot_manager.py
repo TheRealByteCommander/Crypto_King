@@ -635,51 +635,51 @@ class TradingBot:
                     
                     # Execute order
                     order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
-                        
-                        # Calculate profit/loss
-                        pnl = None
-                        pnl_percent = None
-                        if self.position_entry_price > 0:
-                            pnl = (current_price - self.position_entry_price) * quantity
-                            pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
-                        
-                        # Save trade
-                        trade = {
-                            "bot_id": self.bot_id,
-                            "symbol": symbol,
-                            "side": "SELL",
-                            "quantity": quantity,
-                            "order_id": str(order.get("orderId", "")),
-                            "status": order.get("status", ""),
-                            "executed_qty": float(order.get("executedQty", 0)),
-                            "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                            "entry_price": current_price,
-                            "strategy": self.current_config["strategy"],
-                            "trading_mode": trading_mode,
-                            "confidence": analysis.get("confidence", 0.0),
-                            "indicators": analysis.get("indicators", {}),
-                            "timestamp": datetime.now(timezone.utc).isoformat()
-                        }
-                        
-                        if pnl is not None:
-                            trade["pnl"] = pnl
-                            trade["pnl_percent"] = pnl_percent
-                            trade["position_entry_price"] = self.position_entry_price
-                        
-                        await self.db.trades.insert_one(trade)
-                        
-                        # Position closed
-                        self.position = None
-                        self.position_size = 0.0
-                        self.position_entry_price = 0.0
-                        
-                        pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
-                        logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg})")
-                        await self.agent_manager.log_agent_message(
-                            "CypherTrade",
-                            f"SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg}) (Order ID: {order.get('orderId')})",
-                            "trade"
-                        )
+                    
+                    # Calculate profit/loss
+                    pnl = None
+                    pnl_percent = None
+                    if self.position_entry_price > 0:
+                        pnl = (current_price - self.position_entry_price) * quantity
+                        pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                    
+                    # Save trade
+                    trade = {
+                        "bot_id": self.bot_id,
+                        "symbol": symbol,
+                        "side": "SELL",
+                        "quantity": quantity,
+                        "order_id": str(order.get("orderId", "")),
+                        "status": order.get("status", ""),
+                        "executed_qty": float(order.get("executedQty", 0)),
+                        "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                        "entry_price": current_price,
+                        "strategy": self.current_config["strategy"],
+                        "trading_mode": trading_mode,
+                        "confidence": analysis.get("confidence", 0.0),
+                        "indicators": analysis.get("indicators", {}),
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    
+                    if pnl is not None:
+                        trade["pnl"] = pnl
+                        trade["pnl_percent"] = pnl_percent
+                        trade["position_entry_price"] = self.position_entry_price
+                    
+                    await self.db.trades.insert_one(trade)
+                    
+                    # Position closed
+                    self.position = None
+                    self.position_size = 0.0
+                    self.position_entry_price = 0.0
+                    
+                    pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
+                    logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg})")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg}) (Order ID: {order.get('orderId')})",
+                        "trade"
+                    )
                 
                 elif self.position == "SHORT":
                     # We have a SHORT position - close it by buying
