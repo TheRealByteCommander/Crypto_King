@@ -1,49 +1,30 @@
 #!/bin/bash
-# Prüft den Backend-Status und zeigt alle verfügbaren Informationen
+# Prüfe Backend-Status und Logs
 
-BACKEND_URL="http://localhost:8001"
-
-echo "=== Backend Status-Check ==="
-echo "Backend URL: ${BACKEND_URL}"
+echo "=== Backend Status Check ==="
 echo ""
 
-# 1. Health Check
-echo "[INFO] Health Check..."
-curl -s "${BACKEND_URL}/api/health" | python3 -m json.tool 2>/dev/null || curl -s "${BACKEND_URL}/api/health"
-echo ""
-echo ""
-
-# 2. Agents Status
-echo "[INFO] Agents Konfiguration..."
-curl -s "${BACKEND_URL}/api/agents" | python3 -m json.tool 2>/dev/null || curl -s "${BACKEND_URL}/api/agents"
-echo ""
+# 1. Supervisor Status
+echo "[1/4] Supervisor Status..."
+sudo supervisorctl status cyphertrade-backend
 echo ""
 
-# 3. Bot Status
-echo "[INFO] Bot Status..."
-curl -s "${BACKEND_URL}/api/bot/status" | python3 -m json.tool 2>/dev/null || curl -s "${BACKEND_URL}/api/bot/status"
-echo ""
-echo ""
-
-# 4. Verfügbare Strategien
-echo "[INFO] Verfügbare Strategien..."
-curl -s "${BACKEND_URL}/api/strategies" | python3 -m json.tool 2>/dev/null || curl -s "${BACKEND_URL}/api/strategies"
-echo ""
+# 2. Prozess prüfen
+echo "[2/4] Prozess Status..."
+ps aux | grep -E "uvicorn|python.*server" | grep -v grep || echo "Kein Prozess gefunden"
 echo ""
 
-echo "=== Zusammenfassung ==="
-echo "Wenn Binance API-Key Fehler angezeigt wird:"
-echo "  1. Prüfen Sie die .env Datei: /app/backend/.env"
-echo "  2. Stellen Sie sicher, dass BINANCE_API_KEY und BINANCE_API_SECRET korrekt sind"
-echo "  3. Starten Sie das Backend neu: sudo supervisorctl restart cyphertrade-backend"
+# 3. Logs prüfen
+echo "[3/4] Letzte Backend Log-Zeilen (Output)..."
+sudo tail -30 /var/log/supervisor/cyphertrade-backend.log 2>/dev/null || echo "Kein Output Log gefunden"
 echo ""
-echo "Alle verfügbaren Endpunkte:"
-echo "  - GET  ${BACKEND_URL}/api/health        - System Health Check"
-echo "  - GET  ${BACKEND_URL}/api/agents        - Agents Konfiguration"
-echo "  - GET  ${BACKEND_URL}/api/bot/status    - Bot Status"
-echo "  - GET  ${BACKEND_URL}/api/strategies    - Verfügbare Strategien"
-echo "  - GET  ${BACKEND_URL}/api/trades        - Trade History"
-echo "  - GET  ${BACKEND_URL}/api/logs          - Agent Logs"
-echo "  - POST ${BACKEND_URL}/api/bot/start     - Bot starten"
-echo "  - POST ${BACKEND_URL}/api/bot/stop      - Bot stoppen"
 
+# 4. Error Logs prüfen
+echo "[4/4] Letzte Error Log-Zeilen..."
+sudo tail -30 /var/log/supervisor/cyphertrade-backend-error.log 2>/dev/null || echo "Kein Error Log gefunden"
+echo ""
+
+# 5. API Test
+echo "[5/5] Teste API Endpoint..."
+curl -s http://localhost:8000/api/health 2>/dev/null && echo "" || echo "API nicht erreichbar"
+curl -s http://localhost:8000/api/bots/status 2>/dev/null | head -c 200 && echo "" || echo "API nicht erreichbar"
