@@ -91,6 +91,7 @@ http://localhost:3000
 | [INSTALLATION.md](INSTALLATION.md) | 📦 Ausführliche Installations-Anleitung |
 | [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md) | 📊 Alle 5 Trading-Strategien im Detail |
 | [TRADING-MODE-ANLEITUNG.md](TRADING-MODE-ANLEITUNG.md) | 💹 SPOT, MARGIN & FUTURES Trading |
+| [RISK_MANAGEMENT.md](RISK_MANAGEMENT.md) | 🛡️ Stop-Loss & Take-Profit Risikomanagement |
 | [OLLAMA_SETUP.md](OLLAMA_SETUP.md) | 🤖 Ollama & LLM Konfiguration |
 | [AGENT_CONFIG_GUIDE.md](AGENT_CONFIG_GUIDE.md) | ⚙️ Agent-Anpassung ohne Code |
 | [AGENT_TOOLS.md](AGENT_TOOLS.md) | 🛠️ Agent Tools & Funktionsaufrufe |
