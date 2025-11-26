@@ -10,17 +10,23 @@ Ein vollständiges, modulares und sicheres Multi-Agent-System für den automatis
 - **CypherTrade Agent**: Trade Execution Agent - Führt Trades auf Binance sicher aus
 
 ### Trading Features
-- ✅ Moving Average Crossover Strategie (SMA 20/50)
-- ✅ Automatische Marktdatenanalyse alle 5 Minuten
+- ✅ **5 Trading-Strategien**: MA Crossover, RSI, MACD, Bollinger Bands, Combined
+- ✅ **Flexible Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
+- ✅ **Trading Modes**: SPOT, MARGIN, FUTURES (Short Trading unterstützt)
+- ✅ Automatische Marktdatenanalyse (konfigurierbares Intervall)
 - ✅ Binance API Integration (Testnet & Live)
 - ✅ Risk Management mit konfigurierbaren Parametern
 - ✅ Real-time Performance Tracking
+- ✅ Portfolio Management mit Multi-Asset Support
 
 ### Dashboard Features
-- 📊 Live Performance Charts
+- 📊 Live Performance Charts (Recharts)
 - 📈 Trade History mit detaillierten Informationen
+- 💼 Portfolio Overview (Multi-Asset Tracking mit P&L)
 - 🤖 Agent Status Monitoring
 - 📝 Live Agent Communication Logs
+- 🧠 AI Learning Insights (Memory System)
+- 📊 Volatile Assets Discovery
 - 💰 Real-time Balance Updates
 - 🔄 WebSocket-basierte Live-Updates
 
@@ -134,49 +140,68 @@ Nach Änderungen: `sudo supervisorctl restart backend`
 - Crypto Trading ist riskant - nur investieren, was Sie verlieren können
 - Die Entwickler übernehmen keine Haftung
 
-## 📊 Trading Strategie
+## 📊 Trading Strategien
 
-**Moving Average Crossover**: Fast SMA (20) kreuzt Slow SMA (50)
-- **Kaufsignal**: Fast > Slow (von unten)
-- **Verkaufssignal**: Fast < Slow (von oben)
-- **Analyse**: Alle 5 Minuten
+Project CypherTrade unterstützt **5 Trading-Strategien**:
 
-### `npm run eject`
+1. **Moving Average Crossover** - Fast SMA (20) kreuzt Slow SMA (50)
+   - **Kaufsignal**: Fast > Slow (von unten)
+   - **Verkaufssignal**: Fast < Slow (von oben)
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+2. **RSI** - Relative Strength Index (Momentum)
+   - **Kaufsignal**: RSI < 30 (Oversold)
+   - **Verkaufssignal**: RSI > 70 (Overbought)
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+3. **MACD** - Moving Average Convergence Divergence
+   - Trend + Momentum Kombination
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+4. **Bollinger Bands** - Volatilitäts-basiert
+   - Mean-Reversion Strategie
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+5. **Combined** - Multi-Indikator (MA + RSI + MACD)
+   - Konsens aus 3 Strategien (empfohlen für Anfänger)
 
-## Learn More
+**Verfügbare Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+**Detaillierte Dokumentation**: Siehe `/app/TRADING_STRATEGIES.md`
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## 🔧 Weitere Features
 
-### Code Splitting
+### Memory & Learning System
+- Agents lernen aus vergangenen Trades
+- Pattern Recognition für bessere Entscheidungen
+- Collective Insights von allen Agents
+- Siehe: `/app/MEMORY_SYSTEM.md`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### Agent Tools
+- Funktionale Tools für alle Agents
+- Market Data Access für CypherMind
+- Trade Execution Tools für CypherTrade
+- Information Tools für NexusChat
+- Siehe: `/app/AGENT_TOOLS.md`
 
-### Analyzing the Bundle Size
+### MCP Server
+- Model Context Protocol Integration
+- Tool-basierte API für externe Agents
+- Siehe: `/app/MCP_SERVER.md`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Trading Modes
+- **SPOT**: Standard Spot Trading
+- **MARGIN**: Margin Trading mit Leverage
+- **FUTURES**: Futures Trading mit Short Support
+- Siehe: `/app/TRADING-MODE-ANLEITUNG.md`
 
-### Making a Progressive Web App
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## 📚 Weitere Dokumentation
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- **Haupt-README**: `/app/README.md`
+- **Installation**: `/app/INSTALLATION.md`
+- **Quick Start**: `/app/QUICK_START.md`
+- **Trading Strategien**: `/app/TRADING_STRATEGIES.md`
+- **Trading Modes**: `/app/TRADING-MODE-ANLEITUNG.md`
+- **Ollama Setup**: `/app/OLLAMA_SETUP.md`
+- **Agent Config**: `/app/AGENT_CONFIG_GUIDE.md`
+- **Memory System**: `/app/MEMORY_SYSTEM.md`
+- **Agent Tools**: `/app/AGENT_TOOLS.md`
+- **MCP Server**: `/app/MCP_SERVER.md`

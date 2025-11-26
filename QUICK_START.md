@@ -46,9 +46,11 @@ sudo supervisorctl restart cyphertrade-backend
 1. **Dashboard öffnen:** `http://localhost:3000`
 
 2. **Bot konfigurieren:**
-   - Strategie: `MA Crossover (SMA 20/50)`
-   - Symbol: `BTCUSDT`
+   - Strategie: `MA Crossover`, `RSI`, `MACD`, `Bollinger Bands` oder `Combined`
+   - Symbol: `BTCUSDT` (oder jedes andere Binance-Paar)
    - Amount: `10` (USDT)
+   - Timeframe: `5m` (oder 1m, 15m, 30m, 1h, 4h, 1d, etc.)
+   - Trading Mode: `SPOT` (Standard) oder `MARGIN`/`FUTURES` für Short Trading
 
 3. **Bot starten:** Klick auf "Start Trading Bot"
 
@@ -89,8 +91,13 @@ sudo systemctl status mongod
 ## 📚 Dokumentation
 
 - **Installation:** `/app/INSTALLATION.md`
+- **Trading Strategien:** `/app/TRADING_STRATEGIES.md`
+- **Trading Modes:** `/app/TRADING-MODE-ANLEITUNG.md`
 - **Ollama Setup:** `/app/OLLAMA_SETUP.md`
 - **Agent Config:** `/app/AGENT_CONFIG_GUIDE.md`
+- **Memory System:** `/app/MEMORY_SYSTEM.md`
+- **Agent Tools:** `/app/AGENT_TOOLS.md`
+- **MCP Server:** `/app/MCP_SERVER.md`
 - **README:** `/app/frontend/README.md`
 
 ## ⚠️ Wichtig
@@ -182,7 +189,12 @@ sudo supervisorctl restart cyphertrade-backend
 1. **Testnet zuerst:** Immer mit Testnet beginnen
 2. **Kleine Beträge:** Testen Sie mit 10-50 USDT
 3. **Logs beobachten:** Verstehen Sie das Agent-Verhalten
-4. **Strategie verstehen:** MA Crossover = SMA20 kreuzt SMA50
+4. **Strategie verstehen:**
+   - **MA Crossover**: SMA20 kreuzt SMA50 (Trend-Folge)
+   - **RSI**: Momentum-basiert (Oversold/Overbought)
+   - **MACD**: Trend + Momentum Kombination
+   - **Bollinger Bands**: Volatilitäts-Trading
+   - **Combined**: Multi-Indikator Konsens (empfohlen für Anfänger)
 5. **Geduld:** Trades passieren nur bei klaren Signalen
 
 ## 🎉 Ready!

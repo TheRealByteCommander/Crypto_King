@@ -11,6 +11,8 @@ Das Memory-System ermöglicht es jedem Agent:
 - ✅ Performance über Zeit zu verbessern
 - ✅ Wissen zwischen Sessions zu behalten
 
+**WICHTIG:** Das Learning-System wird automatisch bei jedem abgeschlossenen Trade aktiviert. Beide Agents (CypherMind & CypherTrade) lernen aus jedem Trade-Outcome.
+
 ## 🏗️ Architektur
 
 ### Memory-Typen

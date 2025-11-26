@@ -34,17 +34,25 @@ http://localhost:3000
 - **CypherTrade** - Trade Execution Agent
 
 ### 💹 Trading Features
-- Moving Average Crossover Strategie (SMA 20/50)
-- Automatische Marktanalyse alle 5 Minuten
+- **5 Trading-Strategien**: MA Crossover, RSI, MACD, Bollinger Bands, Combined
+- **Flexible Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
+- **Trading Modes**: SPOT, MARGIN, FUTURES (Short Trading unterstützt)
+- **Automatisches Risikomanagement**: Stop-Loss bei -2%, Take-Profit bei 2-5%
+- Automatische Marktanalyse (konfigurierbares Intervall)
 - Binance Integration (Testnet & Live)
-- Risk Management
+- Risk Management mit automatischer Position-Überwachung
 - Real-time Performance Tracking
+- Portfolio Management mit Multi-Asset Support
+- **AI Learning System**: Agents lernen aus jedem Trade
 
 ### 📊 Dashboard
 - Live Performance Charts (Recharts)
-- Trade History
+- Trade History mit detaillierten Informationen
+- Portfolio Overview (Multi-Asset Tracking)
 - Agent Status Monitor
 - Live Agent Communication Logs
+- AI Learning Insights (Memory System)
+- Volatile Assets Discovery
 - WebSocket Real-time Updates
 - Cyber-Theme Design
 
@@ -53,6 +61,9 @@ http://localhost:3000
 - **Ollama LLMs** (lokal, kostenlos)
 - **Verschiedene Modelle pro Agent**
 - **Strategie-Parameter anpassbar**
+- **Agent Tools System** (Funktionsaufrufe für Agents)
+- **Memory & Learning System** (Agents lernen aus Trades)
+- **MCP Server** (Model Context Protocol Integration)
 
 ---
 
@@ -78,8 +89,13 @@ http://localhost:3000
 |-------|--------------|
 | [QUICK_START.md](QUICK_START.md) | ⚡ Schnellstart in 5 Minuten |
 | [INSTALLATION.md](INSTALLATION.md) | 📦 Ausführliche Installations-Anleitung |
+| [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md) | 📊 Alle 5 Trading-Strategien im Detail |
+| [TRADING-MODE-ANLEITUNG.md](TRADING-MODE-ANLEITUNG.md) | 💹 SPOT, MARGIN & FUTURES Trading |
 | [OLLAMA_SETUP.md](OLLAMA_SETUP.md) | 🤖 Ollama & LLM Konfiguration |
 | [AGENT_CONFIG_GUIDE.md](AGENT_CONFIG_GUIDE.md) | ⚙️ Agent-Anpassung ohne Code |
+| [AGENT_TOOLS.md](AGENT_TOOLS.md) | 🛠️ Agent Tools & Funktionsaufrufe |
+| [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) | 🧠 AI Learning & Memory System |
+| [MCP_SERVER.md](MCP_SERVER.md) | 🔌 MCP Server Integration |
 | [frontend/README.md](frontend/README.md) | 🎨 Frontend & Features |
 
 ---
@@ -188,10 +204,12 @@ http://localhost:3000
 
 ### 2. Bot starten
 
-1. Strategie wählen: `MA Crossover (SMA 20/50)`
-2. Symbol: `BTCUSDT`
+1. Strategie wählen: `MA Crossover`, `RSI`, `MACD`, `Bollinger Bands` oder `Combined`
+2. Symbol: `BTCUSDT` (oder jedes andere Binance-Paar)
 3. Amount: `100` USDT
-4. Klick: **"Start Trading Bot"**
+4. Timeframe: `5m` (oder 1m, 15m, 30m, 1h, 4h, 1d, etc.)
+5. Trading Mode: `SPOT` (oder `MARGIN`/`FUTURES` für Short Trading)
+6. Klick: **"Start Trading Bot"**
 
 ### 3. Monitoring
 
@@ -225,7 +243,9 @@ Wählen Sie im Dashboard aus dem Dropdown-Menü:
 - **Bollinger Bands**: Volatilitäts-Trading
 - **Combined**: Konsens aus 3 Indikatoren (empfohlen für Anfänger)
 
-**Analyse-Intervall**: Alle 5 Minuten
+**Verfügbare Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
+
+**Standard-Analyse-Intervall**: 5 Minuten (konfigurierbar)
 
 **Detaillierte Strategie-Dokumentation**: [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md)
 
@@ -373,11 +393,17 @@ class MyStrategy(TradingStrategy):
 
 ## 📈 Roadmap
 
-- [ ] RSI Strategie
-- [ ] MACD Strategie
-- [ ] Bollinger Bands
+- [x] RSI Strategie ✅
+- [x] MACD Strategie ✅
+- [x] Bollinger Bands ✅
+- [x] Combined Multi-Indikator Strategie ✅
+- [x] Trading Modes (SPOT, MARGIN, FUTURES) ✅
+- [x] Memory & Learning System ✅
+- [x] Agent Tools System ✅
+- [x] Portfolio Management ✅
+- [x] MCP Server Integration ✅
 - [ ] Backtesting Framework
-- [ ] Multi-Symbol Trading
+- [ ] Multi-Symbol Trading (gleichzeitig)
 - [ ] Advanced Risk Management
 - [ ] Machine Learning Integration
 - [ ] Mobile App
@@ -423,4 +449,23 @@ Bei Fragen oder Problemen:
 
 ---
 
-## Getting Started with Create React App
+---
+
+## 🆕 Neu in dieser Version
+
+### Implementierte Features
+- ✅ **5 Trading-Strategien** vollständig implementiert
+- ✅ **Trading Modes**: SPOT, MARGIN, FUTURES mit Short Trading Support
+- ✅ **Flexible Timeframes**: Von 1 Minute bis 1 Monat
+- ✅ **Memory System**: Agents lernen aus vergangenen Trades
+- ✅ **Agent Tools**: Funktionale Tools für alle Agents
+- ✅ **Portfolio Management**: Multi-Asset Tracking mit P&L
+- ✅ **MCP Server**: Model Context Protocol Integration
+- ✅ **Volatile Assets Discovery**: Automatische Erkennung volatiler Märkte
+
+### Weitere Dokumentation
+- [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md) - Detaillierte Strategie-Dokumentation
+- [TRADING-MODE-ANLEITUNG.md](TRADING-MODE-ANLEITUNG.md) - Trading Modes Guide
+- [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) - AI Learning System
+- [AGENT_TOOLS.md](AGENT_TOOLS.md) - Agent Tools Dokumentation
+- [MCP_SERVER.md](MCP_SERVER.md) - MCP Server Setup

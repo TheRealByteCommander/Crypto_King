@@ -22,6 +22,9 @@ DEFAULT_BOLLINGER_STD_DEV = 2
 # Risk Management Constants
 MIN_PROFIT_LOSS_THRESHOLD = 2.0  # $2 minimum loss to consider as failure
 QUANTITY_DECIMAL_PLACES = 6
+STOP_LOSS_PERCENT = -2.0  # Stop loss at -2% (sell position if loss >= 2%)
+TAKE_PROFIT_MIN_PERCENT = 2.0  # Minimum take profit at +2%
+TAKE_PROFIT_MAX_PERCENT = 5.0  # Maximum take profit at +5% (take profit between 2-5%)
 
 # Binance Trading Fees
 BINANCE_TAKER_FEE = 0.001  # 0.1% fee for market orders (taker)

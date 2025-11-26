@@ -11,7 +11,10 @@ from constants import (
     BOT_LOOP_INTERVAL_SECONDS,
     BOT_ERROR_RETRY_DELAY_SECONDS,
     MIN_PROFIT_LOSS_THRESHOLD,
-    QUANTITY_DECIMAL_PLACES
+    QUANTITY_DECIMAL_PLACES,
+    STOP_LOSS_PERCENT,
+    TAKE_PROFIT_MIN_PERCENT,
+    TAKE_PROFIT_MAX_PERCENT
 )
 import json
 
@@ -350,14 +353,18 @@ class TradingBot:
                 log_message = f"Market Analysis for {symbol}: {signal} signal (Confidence: {confidence:.2f}){price_info}\nReason: {reason}"
                 await self.agent_manager.log_agent_message("CypherMind", log_message, "analysis")
                 
-                # Step 4: Execute trade if signal is strong enough
+                # Step 4: Check stop loss and take profit for existing positions BEFORE executing new trades
+                if self.position is not None and self.position_entry_price > 0:
+                    await self._check_stop_loss_and_take_profit(symbol, analysis)
+                
+                # Step 5: Execute trade if signal is strong enough
                 if signal in ["BUY", "SELL"] and confidence >= 0.6:
                     logger.info(f"Bot {self.bot_id}: Strong {signal} signal detected (confidence: {confidence:.2f}), executing trade...")
                     await self._execute_trade(analysis)
                 else:
                     logger.info(f"Bot {self.bot_id}: Signal: {signal}, Confidence: {confidence:.2f} - No trade executed (confidence too low or HOLD signal)")
                 
-                # Step 5: Wait before next iteration
+                # Step 6: Wait before next iteration
                 await asyncio.sleep(BOT_LOOP_INTERVAL_SECONDS)
                 
             except asyncio.CancelledError:
@@ -437,6 +444,313 @@ class TradingBot:
             self.position = None
             self.position_size = 0.0
             self.position_entry_price = 0.0
+    
+    async def _check_stop_loss_and_take_profit(self, symbol: str, analysis: Dict[str, Any]):
+        """Check if stop loss or take profit should be triggered for current position."""
+        try:
+            if self.position is None or self.position_entry_price <= 0:
+                return
+            
+            current_price = self.binance_client.get_current_price(symbol)
+            trading_mode = self.current_config.get("trading_mode", "SPOT")
+            
+            # Calculate P&L percentage
+            if self.position == "LONG":
+                pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+            elif self.position == "SHORT":
+                pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+            else:
+                return
+            
+            # Check stop loss (-2%)
+            if pnl_percent <= STOP_LOSS_PERCENT:
+                logger.warning(f"Bot {self.bot_id}: STOP LOSS triggered! Position: {self.position}, Entry: {self.position_entry_price}, Current: {current_price}, P&L: {pnl_percent:.2f}%")
+                await self.agent_manager.log_agent_message(
+                    "CypherTrade",
+                    f"🛑 STOP LOSS triggered at {pnl_percent:.2f}% loss. Closing position to limit losses.",
+                    "warning"
+                )
+                
+                # Force close position
+                if self.position == "LONG":
+                    # Execute SELL to close LONG
+                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    balance = self.binance_client.get_account_balance(base_asset, trading_mode)
+                    if balance > 0:
+                        quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
+                        adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                        if adjusted_quantity:
+                            quantity = adjusted_quantity
+                            order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
+                            
+                            # Calculate final P&L
+                            pnl = (current_price - self.position_entry_price) * quantity
+                            pnl_percent_final = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                            
+                            # Save trade
+                            trade = {
+                                "bot_id": self.bot_id,
+                                "symbol": symbol,
+                                "side": "SELL",
+                                "quantity": quantity,
+                                "order_id": str(order.get("orderId", "")),
+                                "status": order.get("status", ""),
+                                "executed_qty": float(order.get("executedQty", 0)),
+                                "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                                "entry_price": current_price,
+                                "strategy": self.current_config["strategy"],
+                                "trading_mode": trading_mode,
+                                "confidence": analysis.get("confidence", 0.0),
+                                "indicators": analysis.get("indicators", {}),
+                                "exit_reason": "STOP_LOSS",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "pnl": pnl,
+                                "pnl_percent": pnl_percent_final,
+                                "position_entry_price": self.position_entry_price
+                            }
+                            await self.db.trades.insert_one(trade)
+                            
+                            # Learn from closed position
+                            if pnl is not None:
+                                await self._learn_from_closed_position(trade, pnl, self.position_entry_price, current_price)
+                            
+                            # Reset position
+                            self.position = None
+                            self.position_size = 0.0
+                            old_entry_price = self.position_entry_price
+                            self.position_entry_price = 0.0
+                            
+                            logger.info(f"Bot {self.bot_id}: STOP LOSS executed - SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
+                            await self.agent_manager.log_agent_message(
+                                "CypherTrade",
+                                f"STOP LOSS executed: SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)",
+                                "trade"
+                            )
+                elif self.position == "SHORT":
+                    # Execute BUY to close SHORT
+                    amount_usdt = self.current_config["amount"]
+                    quantity = amount_usdt / current_price
+                    quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
+                    adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                    if adjusted_quantity:
+                        quantity = adjusted_quantity
+                        order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
+                        
+                        # Calculate final P&L (for SHORT: profit when price goes down)
+                        pnl = (self.position_entry_price - current_price) * quantity
+                        pnl_percent_final = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                        
+                        # Save trade
+                        trade = {
+                            "bot_id": self.bot_id,
+                            "symbol": symbol,
+                            "side": "BUY",
+                            "quantity": quantity,
+                            "order_id": str(order.get("orderId", "")),
+                            "status": order.get("status", ""),
+                            "executed_qty": float(order.get("executedQty", 0)),
+                            "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                            "entry_price": current_price,
+                            "strategy": self.current_config["strategy"],
+                            "trading_mode": trading_mode,
+                            "position_type": "SHORT_CLOSE",
+                            "exit_reason": "STOP_LOSS",
+                            "confidence": analysis.get("confidence", 0.0),
+                            "indicators": analysis.get("indicators", {}),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "pnl": pnl,
+                            "pnl_percent": pnl_percent_final,
+                            "position_entry_price": self.position_entry_price
+                        }
+                        await self.db.trades.insert_one(trade)
+                        
+                        # Learn from closed position
+                        if pnl is not None:
+                            await self._learn_from_closed_position(trade, pnl, self.position_entry_price, current_price)
+                        
+                        # Reset position
+                        self.position = None
+                        self.position_size = 0.0
+                        self.position_entry_price = 0.0
+                        
+                        logger.info(f"Bot {self.bot_id}: STOP LOSS executed - BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"STOP LOSS executed: BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)",
+                            "trade"
+                        )
+                return
+            
+            # Check take profit (2-5%)
+            if TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT:
+                logger.info(f"Bot {self.bot_id}: TAKE PROFIT triggered! Position: {self.position}, Entry: {self.position_entry_price}, Current: {current_price}, P&L: {pnl_percent:.2f}%")
+                await self.agent_manager.log_agent_message(
+                    "CypherTrade",
+                    f"✅ TAKE PROFIT triggered at {pnl_percent:.2f}% profit. Closing position to secure gains.",
+                    "trade"
+                )
+                
+                # Force close position
+                if self.position == "LONG":
+                    # Execute SELL to close LONG
+                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    balance = self.binance_client.get_account_balance(base_asset, trading_mode)
+                    if balance > 0:
+                        quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
+                        adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                        if adjusted_quantity:
+                            quantity = adjusted_quantity
+                            order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
+                            
+                            # Calculate final P&L
+                            pnl = (current_price - self.position_entry_price) * quantity
+                            pnl_percent_final = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                            
+                            # Save trade
+                            trade = {
+                                "bot_id": self.bot_id,
+                                "symbol": symbol,
+                                "side": "SELL",
+                                "quantity": quantity,
+                                "order_id": str(order.get("orderId", "")),
+                                "status": order.get("status", ""),
+                                "executed_qty": float(order.get("executedQty", 0)),
+                                "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                                "entry_price": current_price,
+                                "strategy": self.current_config["strategy"],
+                                "trading_mode": trading_mode,
+                                "confidence": analysis.get("confidence", 0.0),
+                                "indicators": analysis.get("indicators", {}),
+                                "exit_reason": "TAKE_PROFIT",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "pnl": pnl,
+                                "pnl_percent": pnl_percent_final,
+                                "position_entry_price": self.position_entry_price
+                            }
+                            await self.db.trades.insert_one(trade)
+                            
+                            # Learn from closed position
+                            if pnl is not None:
+                                await self._learn_from_closed_position(trade, pnl, self.position_entry_price, current_price)
+                            
+                            # Reset position
+                            self.position = None
+                            self.position_size = 0.0
+                            old_entry_price = self.position_entry_price
+                            self.position_entry_price = 0.0
+                            
+                            logger.info(f"Bot {self.bot_id}: TAKE PROFIT executed - SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
+                            await self.agent_manager.log_agent_message(
+                                "CypherTrade",
+                                f"TAKE PROFIT executed: SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)",
+                                "trade"
+                            )
+                elif self.position == "SHORT":
+                    # Execute BUY to close SHORT
+                    amount_usdt = self.current_config["amount"]
+                    quantity = amount_usdt / current_price
+                    quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
+                    adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                    if adjusted_quantity:
+                        quantity = adjusted_quantity
+                        order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
+                        
+                        # Calculate final P&L (for SHORT: profit when price goes down)
+                        pnl = (self.position_entry_price - current_price) * quantity
+                        pnl_percent_final = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                        
+                        # Save trade
+                        trade = {
+                            "bot_id": self.bot_id,
+                            "symbol": symbol,
+                            "side": "BUY",
+                            "quantity": quantity,
+                            "order_id": str(order.get("orderId", "")),
+                            "status": order.get("status", ""),
+                            "executed_qty": float(order.get("executedQty", 0)),
+                            "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                            "entry_price": current_price,
+                            "strategy": self.current_config["strategy"],
+                            "trading_mode": trading_mode,
+                            "position_type": "SHORT_CLOSE",
+                            "exit_reason": "TAKE_PROFIT",
+                            "confidence": analysis.get("confidence", 0.0),
+                            "indicators": analysis.get("indicators", {}),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "pnl": pnl,
+                            "pnl_percent": pnl_percent_final,
+                            "position_entry_price": self.position_entry_price
+                        }
+                        await self.db.trades.insert_one(trade)
+                        
+                        # Learn from closed position
+                        if pnl is not None:
+                            await self._learn_from_closed_position(trade, pnl, self.position_entry_price, current_price)
+                        
+                        # Reset position
+                        self.position = None
+                        self.position_size = 0.0
+                        self.position_entry_price = 0.0
+                        
+                        logger.info(f"Bot {self.bot_id}: TAKE PROFIT executed - BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"TAKE PROFIT executed: BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)",
+                            "trade"
+                        )
+                return
+        
+        except Exception as e:
+            logger.error(f"Bot {self.bot_id}: Error checking stop loss/take profit: {e}", exc_info=True)
+    
+    async def _learn_from_closed_position(self, trade: Dict[str, Any], pnl: float, entry_price: float, exit_price: float):
+        """Learn from a closed position - called for all relevant agents."""
+        try:
+            # Determine outcome based on P&L
+            if pnl > MIN_PROFIT_LOSS_THRESHOLD:
+                outcome = "success"
+            elif pnl < -MIN_PROFIT_LOSS_THRESHOLD:
+                outcome = "failure"
+            else:
+                outcome = "neutral"
+            
+            # Prepare trade data for learning
+            learning_trade = {
+                "order_id": trade.get("order_id", ""),
+                "symbol": trade.get("symbol", ""),
+                "side": trade.get("side", ""),
+                "strategy": trade.get("strategy", ""),
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "confidence": trade.get("confidence", 0.0),
+                "indicators": trade.get("indicators", {}),
+                "bot_id": self.bot_id
+            }
+            
+            # Learn for CypherMind (decision maker)
+            cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
+            await cyphermind_memory.learn_from_trade(learning_trade, outcome, pnl)
+            logger.info(f"Bot {self.bot_id}: CypherMind learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
+            
+            # Learn for CypherTrade (executor)
+            cyphertrade_memory = self.agent_manager.memory_manager.get_agent_memory("CypherTrade")
+            await cyphertrade_memory.learn_from_trade(learning_trade, outcome, pnl)
+            logger.info(f"Bot {self.bot_id}: CypherTrade learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
+            
+            # Store collective memory about trade outcome
+            await self.agent_manager.memory_manager.store_collective_memory(
+                memory_type="trade_completed",
+                content={
+                    "symbol": trade.get("symbol", ""),
+                    "strategy": trade.get("strategy", ""),
+                    "outcome": outcome,
+                    "profit_loss": pnl,
+                    "bot_id": self.bot_id
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Bot {self.bot_id}: Error learning from closed position: {e}", exc_info=True)
     
     async def _get_total_spent(self) -> float:
         """Calculate total amount spent (BUY trades) for this bot."""
@@ -668,6 +982,12 @@ class TradingBot:
                     
                     await self.db.trades.insert_one(trade)
                     
+                    # Learn from closed position (if P&L is available)
+                    # Store entry price before resetting position
+                    old_entry_price = self.position_entry_price
+                    if pnl is not None and old_entry_price > 0:
+                        await self._learn_from_closed_position(trade, pnl, old_entry_price, current_price)
+                    
                     # Position closed
                     self.position = None
                     self.position_size = 0.0
@@ -730,6 +1050,12 @@ class TradingBot:
                         trade["position_entry_price"] = self.position_entry_price
                     
                     await self.db.trades.insert_one(trade)
+                    
+                    # Learn from closed position (if P&L is available)
+                    # Store entry price before resetting position
+                    old_entry_price = self.position_entry_price
+                    if pnl is not None and old_entry_price > 0:
+                        await self._learn_from_closed_position(trade, pnl, old_entry_price, current_price)
                     
                     # SHORT position closed
                     self.position = None
