@@ -80,6 +80,13 @@ class AgentMemory:
     async def learn_from_trade(self, trade: Dict[str, Any], outcome: str, profit_loss: float):
         """Learn from a completed trade."""
         try:
+            # Extract delay and slippage information for learning
+            execution_delay = trade.get("execution_delay_seconds")
+            price_slippage = trade.get("price_slippage")
+            price_slippage_percent = trade.get("price_slippage_percent")
+            decision_price = trade.get("decision_price")
+            execution_price = trade.get("execution_price")
+            
             learning_entry = {
                 "trade_id": trade.get("order_id"),
                 "symbol": trade.get("symbol"),
@@ -91,7 +98,12 @@ class AgentMemory:
                 "profit_loss": profit_loss,
                 "indicators_at_entry": trade.get("indicators", {}),
                 "signal_confidence": trade.get("confidence", 0.0),
-                "lessons": self._extract_lessons(trade, outcome, profit_loss)
+                "execution_delay_seconds": execution_delay,  # Delay between decision and execution
+                "decision_price": decision_price,  # Price when signal was generated
+                "execution_price": execution_price,  # Actual execution price
+                "price_slippage": price_slippage,  # Price difference
+                "price_slippage_percent": price_slippage_percent,  # Slippage in %
+                "lessons": self._extract_lessons(trade, outcome, profit_loss, execution_delay, price_slippage_percent)
             }
             
             await self.store_memory(
@@ -105,8 +117,8 @@ class AgentMemory:
         except Exception as e:
             logger.error(f"Error learning from trade: {e}")
     
-    def _extract_lessons(self, trade: Dict[str, Any], outcome: str, profit_loss: float) -> List[str]:
-        """Extract lessons from trade outcome."""
+    def _extract_lessons(self, trade: Dict[str, Any], outcome: str, profit_loss: float, execution_delay: float = None, price_slippage_percent: float = None) -> List[str]:
+        """Extract lessons from trade outcome, including delay and slippage insights."""
         lessons = []
         
         strategy = trade.get("strategy", "unknown")
@@ -121,6 +133,22 @@ class AgentMemory:
             if confidence < 0.6:
                 lessons.append(f"Low confidence signals are risky - require higher threshold")
             lessons.append(f"Review market conditions at entry time")
+        
+        # Add delay and slippage lessons
+        if execution_delay is not None:
+            if execution_delay > 10:
+                lessons.append(f"High execution delay ({execution_delay:.1f}s) - market may have moved significantly")
+            elif execution_delay < 2:
+                lessons.append(f"Fast execution ({execution_delay:.1f}s) - good timing")
+        
+        if price_slippage_percent is not None:
+            if abs(price_slippage_percent) > 0.5:
+                if price_slippage_percent > 0:
+                    lessons.append(f"Positive slippage (+{price_slippage_percent:.2f}%) - execution price better than expected")
+                else:
+                    lessons.append(f"Negative slippage ({price_slippage_percent:.2f}%) - execution price worse than expected, consider faster execution")
+            else:
+                lessons.append(f"Minimal slippage ({price_slippage_percent:.2f}%) - good execution quality")
         
         return lessons
     

@@ -42,6 +42,13 @@ system_message: |
   - Berücksichtige Confidence Level der Signale
   - Berechne erwarteten Gewinn NACH Gebühren vor jedem Trade
   
+  WICHTIG - EXECUTION DELAY & SLIPPAGE:
+  - Das System misst automatisch das Delay zwischen Signal-Generierung und Order-Ausführung
+  - Price Slippage (Kursdifferenz) wird automatisch erfasst
+  - Lerne aus historischen Delays: Hohe Delays (>10s) können zu schlechteren Ausführungspreisen führen
+  - Berücksichtige bei der Entscheidung: Schnelle Ausführung ist wichtig für gute Preise
+  - Das System speichert diese Metriken automatisch für Learning
+  
   RISIKOMANAGEMENT - STOP LOSS & TAKE PROFIT:
   - STOP LOSS: Position wird automatisch geschlossen bei -2% Verlust
   - TAKE PROFIT: Position wird automatisch geschlossen bei 2-5% Gewinn

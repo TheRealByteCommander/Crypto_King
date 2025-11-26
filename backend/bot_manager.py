@@ -350,6 +350,10 @@ class TradingBot:
                 confidence = analysis.get("confidence", 0.0)
                 reason = analysis.get("reason", "No specific reason")
                 
+                # Store decision price and timestamp for delay/slippage tracking
+                decision_price = current_price if 'current_price' in locals() else analysis.get("indicators", {}).get("current_price", 0.0)
+                decision_timestamp = datetime.now(timezone.utc)
+                
                 log_message = f"Market Analysis for {symbol}: {signal} signal (Confidence: {confidence:.2f}){price_info}\nReason: {reason}"
                 await self.agent_manager.log_agent_message("CypherMind", log_message, "analysis")
                 
@@ -360,7 +364,8 @@ class TradingBot:
                 # Step 5: Execute trade if signal is strong enough
                 if signal in ["BUY", "SELL"] and confidence >= 0.6:
                     logger.info(f"Bot {self.bot_id}: Strong {signal} signal detected (confidence: {confidence:.2f}), executing trade...")
-                    await self._execute_trade(analysis)
+                    # Pass decision price and timestamp to track delay
+                    await self._execute_trade(analysis, decision_price=decision_price, decision_timestamp=decision_timestamp)
                 else:
                     logger.info(f"Bot {self.bot_id}: Signal: {signal}, Confidence: {confidence:.2f} - No trade executed (confidence too low or HOLD signal)")
                 
@@ -768,12 +773,24 @@ class TradingBot:
             logger.warning(f"Bot {self.bot_id}: Error calculating total spent: {e}")
             return 0.0
     
-    async def _execute_trade(self, analysis: Dict[str, Any]):
-        """Execute a trade based on analysis."""
+    async def _execute_trade(self, analysis: Dict[str, Any], decision_price: float = None, decision_timestamp: datetime = None):
+        """Execute a trade based on analysis.
+        
+        Args:
+            analysis: Analysis result with signal and indicators
+            decision_price: Price at time of signal generation (for slippage tracking)
+            decision_timestamp: Timestamp when signal was generated (for delay tracking)
+        """
         try:
             signal = analysis.get("signal")
             symbol = self.current_config["symbol"]
             configured_amount = self.current_config["amount"]
+            
+            # Track execution timing
+            execution_timestamp = datetime.now(timezone.utc)
+            delay_seconds = None
+            if decision_timestamp:
+                delay_seconds = (execution_timestamp - decision_timestamp).total_seconds()
             
             if signal == "BUY":
                 # Check how much we've already spent
@@ -854,7 +871,32 @@ class TradingBot:
                 logger.info(f"Bot {self.bot_id}: Executing BUY order - Quantity: {quantity}, Value: {final_order_value:.2f} USDT, Budget: {total_spent:.2f}/{configured_amount:.2f} USDT (Remaining: {available_amount - final_order_value:.2f} USDT)")
                 
                 # Execute order
+                execution_start_time = datetime.now(timezone.utc)
                 order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
+                execution_end_time = datetime.now(timezone.utc)
+                
+                # Get actual execution price from order
+                execution_price = float(order.get("price", 0)) or current_price
+                if order.get("fills"):
+                    # Use average fill price if available
+                    fills = order.get("fills", [])
+                    if fills:
+                        total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                        total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                        if total_qty > 0:
+                            execution_price = total_quote / total_qty
+                
+                # Calculate delay and slippage
+                execution_delay_seconds = None
+                price_slippage = None
+                price_slippage_percent = None
+                
+                if decision_timestamp:
+                    execution_delay_seconds = (execution_start_time - decision_timestamp).total_seconds()
+                
+                if decision_price and decision_price > 0:
+                    price_slippage = execution_price - decision_price
+                    price_slippage_percent = ((execution_price - decision_price) / decision_price) * 100
                 
                 # Save trade to database
                 trade = {
@@ -866,37 +908,48 @@ class TradingBot:
                     "status": order.get("status", ""),
                     "executed_qty": float(order.get("executedQty", 0)),
                     "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                    "entry_price": current_price,
+                    "entry_price": execution_price,  # Use actual execution price
+                    "decision_price": decision_price if decision_price else None,  # Price at signal generation
+                    "execution_price": execution_price,  # Actual execution price
+                    "price_slippage": price_slippage,  # Price difference
+                    "price_slippage_percent": price_slippage_percent,  # Slippage in %
+                    "decision_timestamp": decision_timestamp.isoformat() if decision_timestamp else None,
+                    "execution_timestamp": execution_end_time.isoformat(),
+                    "execution_delay_seconds": execution_delay_seconds,  # Delay in seconds
                     "strategy": self.current_config["strategy"],
                     "trading_mode": trading_mode,
                     "confidence": analysis.get("confidence", 0.0),
                     "indicators": analysis.get("indicators", {}),
-                    "timestamp": datetime.now(timezone.utc).isoformat()
+                    "timestamp": execution_end_time.isoformat()
                 }
                 await self.db.trades.insert_one(trade)
                 
                 # Check total spent after trade
                 total_spent_after = await self._get_total_spent()
                 remaining = configured_amount - total_spent_after
-                logger.info(f"Bot {self.bot_id}: BUY order executed: {quantity} {symbol} at {current_price} USDT | Total spent: {total_spent_after:.2f}/{configured_amount:.2f} USDT (Remaining: {remaining:.2f} USDT)")
+                # Build detailed message with delay and slippage info
+                delay_msg = f" | Delay: {execution_delay_seconds:.1f}s" if execution_delay_seconds else ""
+                slippage_msg = f" | Slippage: {price_slippage_percent:+.2f}%" if price_slippage_percent is not None else ""
+                
+                logger.info(f"Bot {self.bot_id}: BUY order executed: {quantity} {symbol} at {execution_price} USDT | Total spent: {total_spent_after:.2f}/{configured_amount:.2f} USDT (Remaining: {remaining:.2f} USDT){delay_msg}{slippage_msg}")
                 await self.agent_manager.log_agent_message(
                     "CypherTrade",
-                    f"BUY order executed: {quantity} {symbol} at {current_price} USDT | Total spent: {total_spent_after:.2f}/{configured_amount:.2f} USDT (Remaining: {remaining:.2f} USDT) (Order ID: {order.get('orderId')})",
+                    f"BUY order executed: {quantity} {symbol} at {execution_price} USDT | Total spent: {total_spent_after:.2f}/{configured_amount:.2f} USDT (Remaining: {remaining:.2f} USDT){delay_msg}{slippage_msg} (Order ID: {order.get('orderId')})",
                     "trade"
                 )
                 
-                # Update position tracking
+                # Update position tracking (use execution_price instead of current_price)
                 if self.position == "LONG":
                     # Add to existing position
                     self.position_size += quantity
                     # Update entry price (weighted average)
-                    total_value = (self.position_size - quantity) * self.position_entry_price + quantity * current_price
-                    self.position_entry_price = total_value / self.position_size if self.position_size > 0 else current_price
+                    total_value = (self.position_size - quantity) * self.position_entry_price + quantity * execution_price
+                    self.position_entry_price = total_value / self.position_size if self.position_size > 0 else execution_price
                 else:
                     # Open new LONG position
                     self.position = "LONG"
                     self.position_size = quantity
-                    self.position_entry_price = current_price
+                    self.position_entry_price = execution_price
             
             elif signal == "SELL":
                 # Update position status before executing SELL
@@ -948,14 +1001,39 @@ class TradingBot:
                         logger.info(f"Bot {self.bot_id}: Adjusted quantity to available balance: {quantity} {base_asset}")
                     
                     # Execute order
+                    execution_start_time = datetime.now(timezone.utc)
                     order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
+                    execution_end_time = datetime.now(timezone.utc)
+                    
+                    # Get actual execution price from order
+                    execution_price = float(order.get("price", 0)) or current_price
+                    if order.get("fills"):
+                        # Use average fill price if available
+                        fills = order.get("fills", [])
+                        if fills:
+                            total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                            total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                            if total_qty > 0:
+                                execution_price = total_quote / total_qty
+                    
+                    # Calculate delay and slippage
+                    execution_delay_seconds = None
+                    price_slippage = None
+                    price_slippage_percent = None
+                    
+                    if decision_timestamp:
+                        execution_delay_seconds = (execution_start_time - decision_timestamp).total_seconds()
+                    
+                    if decision_price and decision_price > 0:
+                        price_slippage = execution_price - decision_price
+                        price_slippage_percent = ((execution_price - decision_price) / decision_price) * 100
                     
                     # Calculate profit/loss
                     pnl = None
                     pnl_percent = None
                     if self.position_entry_price > 0:
-                        pnl = (current_price - self.position_entry_price) * quantity
-                        pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                        pnl = (execution_price - self.position_entry_price) * quantity
+                        pnl_percent = ((execution_price - self.position_entry_price) / self.position_entry_price) * 100
                     
                     # Save trade
                     trade = {
@@ -967,12 +1045,19 @@ class TradingBot:
                         "status": order.get("status", ""),
                         "executed_qty": float(order.get("executedQty", 0)),
                         "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                        "entry_price": current_price,
+                        "entry_price": execution_price,  # Use actual execution price
+                        "decision_price": decision_price if decision_price else None,  # Price at signal generation
+                        "execution_price": execution_price,  # Actual execution price
+                        "price_slippage": price_slippage,  # Price difference
+                        "price_slippage_percent": price_slippage_percent,  # Slippage in %
+                        "decision_timestamp": decision_timestamp.isoformat() if decision_timestamp else None,
+                        "execution_timestamp": execution_end_time.isoformat(),
+                        "execution_delay_seconds": execution_delay_seconds,  # Delay in seconds
                         "strategy": self.current_config["strategy"],
                         "trading_mode": trading_mode,
                         "confidence": analysis.get("confidence", 0.0),
                         "indicators": analysis.get("indicators", {}),
-                        "timestamp": datetime.now(timezone.utc).isoformat()
+                        "timestamp": execution_end_time.isoformat()
                     }
                     
                     if pnl is not None:
@@ -993,11 +1078,15 @@ class TradingBot:
                     self.position_size = 0.0
                     self.position_entry_price = 0.0
                     
+                    # Build detailed message with delay and slippage info
                     pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
-                    logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg})")
+                    delay_msg = f" | Delay: {execution_delay_seconds:.1f}s" if execution_delay_seconds else ""
+                    slippage_msg = f" | Slippage: {price_slippage_percent:+.2f}%" if price_slippage_percent is not None else ""
+                    
+                    logger.info(f"Bot {self.bot_id}: SELL order executed: {quantity} {symbol} at {execution_price} USDT (LONG position closed{pnl_msg}{delay_msg}{slippage_msg})")
                     await self.agent_manager.log_agent_message(
                         "CypherTrade",
-                        f"SELL order executed: {quantity} {symbol} at {current_price} USDT (LONG position closed{pnl_msg}) (Order ID: {order.get('orderId')})",
+                        f"SELL order executed: {quantity} {symbol} at {execution_price} USDT (LONG position closed{pnl_msg}{delay_msg}{slippage_msg}) (Order ID: {order.get('orderId')})",
                         "trade"
                     )
                 
@@ -1016,14 +1105,38 @@ class TradingBot:
                     quantity = adjusted_quantity
                     
                     # Execute BUY order to close SHORT
+                    execution_start_time = datetime.now(timezone.utc)
                     order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
+                    execution_end_time = datetime.now(timezone.utc)
+                    
+                    # Get actual execution price from order
+                    execution_price = float(order.get("price", 0)) or current_price
+                    if order.get("fills"):
+                        fills = order.get("fills", [])
+                        if fills:
+                            total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                            total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                            if total_qty > 0:
+                                execution_price = total_quote / total_qty
+                    
+                    # Calculate delay and slippage
+                    execution_delay_seconds = None
+                    price_slippage = None
+                    price_slippage_percent = None
+                    
+                    if decision_timestamp:
+                        execution_delay_seconds = (execution_start_time - decision_timestamp).total_seconds()
+                    
+                    if decision_price and decision_price > 0:
+                        price_slippage = execution_price - decision_price
+                        price_slippage_percent = ((execution_price - decision_price) / decision_price) * 100
                     
                     # Calculate profit/loss (for SHORT: profit when price goes down)
                     pnl = None
                     pnl_percent = None
                     if self.position_entry_price > 0:
-                        pnl = (self.position_entry_price - current_price) * quantity
-                        pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                        pnl = (self.position_entry_price - execution_price) * quantity
+                        pnl_percent = ((self.position_entry_price - execution_price) / self.position_entry_price) * 100
                     
                     # Save trade
                     trade = {
@@ -1035,13 +1148,20 @@ class TradingBot:
                         "status": order.get("status", ""),
                         "executed_qty": float(order.get("executedQty", 0)),
                         "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                        "entry_price": current_price,
+                        "entry_price": execution_price,  # Use actual execution price
+                        "decision_price": decision_price if decision_price else None,
+                        "execution_price": execution_price,
+                        "price_slippage": price_slippage,
+                        "price_slippage_percent": price_slippage_percent,
+                        "decision_timestamp": decision_timestamp.isoformat() if decision_timestamp else None,
+                        "execution_timestamp": execution_end_time.isoformat(),
+                        "execution_delay_seconds": execution_delay_seconds,
                         "strategy": self.current_config["strategy"],
                         "trading_mode": trading_mode,
                         "position_type": "SHORT_CLOSE",
                         "confidence": analysis.get("confidence", 0.0),
                         "indicators": analysis.get("indicators", {}),
-                        "timestamp": datetime.now(timezone.utc).isoformat()
+                        "timestamp": execution_end_time.isoformat()
                     }
                     
                     if pnl is not None:
@@ -1063,10 +1183,13 @@ class TradingBot:
                     self.position_entry_price = 0.0
                     
                     pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
-                    logger.info(f"Bot {self.bot_id}: BUY order executed to close SHORT: {quantity} {symbol} at {current_price} USDT{pnl_msg}")
+                    delay_msg = f" | Delay: {execution_delay_seconds:.1f}s" if execution_delay_seconds else ""
+                    slippage_msg = f" | Slippage: {price_slippage_percent:+.2f}%" if price_slippage_percent is not None else ""
+                    
+                    logger.info(f"Bot {self.bot_id}: BUY order executed to close SHORT: {quantity} {symbol} at {execution_price} USDT{pnl_msg}{delay_msg}{slippage_msg}")
                     await self.agent_manager.log_agent_message(
                         "CypherTrade",
-                        f"BUY order executed to close SHORT: {quantity} {symbol} at {current_price} USDT{pnl_msg} (Order ID: {order.get('orderId')})",
+                        f"BUY order executed to close SHORT: {quantity} {symbol} at {execution_price} USDT{pnl_msg}{delay_msg}{slippage_msg} (Order ID: {order.get('orderId')})",
                         "trade"
                     )
                 
@@ -1087,7 +1210,31 @@ class TradingBot:
                         quantity = adjusted_quantity
                         
                         # Execute SELL order to open SHORT (for Margin/Futures)
+                        execution_start_time = datetime.now(timezone.utc)
                         order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
+                        execution_end_time = datetime.now(timezone.utc)
+                        
+                        # Get actual execution price from order
+                        execution_price = float(order.get("price", 0)) or current_price
+                        if order.get("fills"):
+                            fills = order.get("fills", [])
+                            if fills:
+                                total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                                total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                                if total_qty > 0:
+                                    execution_price = total_quote / total_qty
+                        
+                        # Calculate delay and slippage
+                        execution_delay_seconds = None
+                        price_slippage = None
+                        price_slippage_percent = None
+                        
+                        if decision_timestamp:
+                            execution_delay_seconds = (execution_start_time - decision_timestamp).total_seconds()
+                        
+                        if decision_price and decision_price > 0:
+                            price_slippage = execution_price - decision_price
+                            price_slippage_percent = ((execution_price - decision_price) / decision_price) * 100
                         
                         # Save trade
                         trade = {
@@ -1099,25 +1246,35 @@ class TradingBot:
                             "status": order.get("status", ""),
                             "executed_qty": float(order.get("executedQty", 0)),
                             "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                            "entry_price": current_price,
+                            "entry_price": execution_price,  # Use actual execution price
+                            "decision_price": decision_price if decision_price else None,
+                            "execution_price": execution_price,
+                            "price_slippage": price_slippage,
+                            "price_slippage_percent": price_slippage_percent,
+                            "decision_timestamp": decision_timestamp.isoformat() if decision_timestamp else None,
+                            "execution_timestamp": execution_end_time.isoformat(),
+                            "execution_delay_seconds": execution_delay_seconds,
                             "strategy": self.current_config["strategy"],
                             "trading_mode": trading_mode,
                             "position_type": "SHORT_OPEN",
                             "confidence": analysis.get("confidence", 0.0),
                             "indicators": analysis.get("indicators", {}),
-                            "timestamp": datetime.now(timezone.utc).isoformat()
+                            "timestamp": execution_end_time.isoformat()
                         }
                         await self.db.trades.insert_one(trade)
                         
                         # Update position tracking - SHORT position opened
                         self.position = "SHORT"
                         self.position_size = quantity
-                        self.position_entry_price = current_price
+                        self.position_entry_price = execution_price
                         
-                        logger.info(f"Bot {self.bot_id}: SELL order executed to open SHORT: {quantity} {symbol} at {current_price} USDT ({trading_mode})")
+                        delay_msg = f" | Delay: {execution_delay_seconds:.1f}s" if execution_delay_seconds else ""
+                        slippage_msg = f" | Slippage: {price_slippage_percent:+.2f}%" if price_slippage_percent is not None else ""
+                        
+                        logger.info(f"Bot {self.bot_id}: SELL order executed to open SHORT: {quantity} {symbol} at {execution_price} USDT ({trading_mode}){delay_msg}{slippage_msg}")
                         await self.agent_manager.log_agent_message(
                             "CypherTrade",
-                            f"SELL order executed to open SHORT position: {quantity} {symbol} at {current_price} USDT ({trading_mode}) (Order ID: {order.get('orderId')})",
+                            f"SELL order executed to open SHORT position: {quantity} {symbol} at {execution_price} USDT ({trading_mode}){delay_msg}{slippage_msg} (Order ID: {order.get('orderId')})",
                             "trade"
                         )
                     else:

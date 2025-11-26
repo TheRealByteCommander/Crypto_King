@@ -85,7 +85,7 @@ lessons = await memory.get_recent_lessons(limit=10)
 
 ### Learning from Trades
 
-Automatisch nach jedem Trade:
+Automatisch nach jedem Trade (inkl. Delay & Slippage Tracking):
 
 ```python
 await memory.learn_from_trade(
@@ -96,12 +96,24 @@ await memory.learn_from_trade(
         "entry_price": 50000,
         "exit_price": 51000,
         "confidence": 0.75,
-        "indicators": {...}
+        "indicators": {...},
+        "decision_price": 50000,  # Preis bei Signal-Generierung
+        "execution_price": 50025,  # Tatsächlicher Ausführungspreis
+        "execution_delay_seconds": 3.5,  # Delay zwischen Signal und Ausführung
+        "price_slippage": 25.0,  # Preis-Differenz
+        "price_slippage_percent": 0.05  # Slippage in %
     },
     outcome="success",  # or "failure", "neutral"
     profit_loss=100.0
 )
 ```
+
+**Automatisch erfasste Metriken:**
+- `decision_price`: Kurs zum Zeitpunkt der Signal-Generierung
+- `execution_price`: Tatsächlicher Ausführungspreis (aus Order-Fills)
+- `execution_delay_seconds`: Zeit zwischen Signal und Order-Ausführung
+- `price_slippage`: Absolute Preis-Differenz
+- `price_slippage_percent`: Slippage in Prozent
 
 ## 📊 Pattern Recognition
 
@@ -165,6 +177,11 @@ Learn from trade → Store in memory → Extract lessons
 - ✅ "High profit trade - similar conditions may be favorable"
 - ❌ "Strategy 'ma_crossover' failed with confidence 0.55"
 - ❌ "Low confidence signals are risky - require higher threshold"
+- ⏱️ "High execution delay (12.5s) - market may have moved significantly"
+- ⏱️ "Fast execution (1.8s) - good timing"
+- 💰 "Positive slippage (+0.15%) - execution price better than expected"
+- 💰 "Negative slippage (-0.32%) - execution price worse than expected, consider faster execution"
+- 💰 "Minimal slippage (0.02%) - good execution quality"
 
 ### 4. Pattern Application
 
