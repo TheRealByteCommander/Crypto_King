@@ -22,6 +22,28 @@ CypherMind hat Zugriff auf folgende Tools für Echtzeit-Marktdaten:
 4. **get_recent_analyses(limit)** - Letzte Marktanalysen abrufen
    - Für Kontext und Trend-Erkennung
 
+5. **get_tradable_symbols(search)** - Alle handelbaren Symbole abrufen
+   - Beispiel: `get_tradable_symbols(search="DOGE")`
+
+6. **validate_symbol(symbol)** - Prüfen ob Symbol handelbar ist
+   - Beispiel: `validate_symbol("BTCUSDT")`
+
+7. **analyze_optimal_coins(max_coins, min_score, exclude_symbols)** - Analysiert Coins für optimale Trading-Opportunities
+   - Kombiniert Echtzeitkurse, technische Indikatoren, News, Volatilität, Trends
+   - Gibt Score (0.0-1.0) und beste Strategie pro Coin zurück
+   - Beispiel: `analyze_optimal_coins(max_coins=10, min_score=0.3)`
+   - Siehe: [AUTONOMOUS_BOTS.md](AUTONOMOUS_BOTS.md) für Details
+
+8. **start_autonomous_bot(symbol, strategy, timeframe, trading_mode)** - Startet autonomen Bot
+   - Max. 2 autonome Bots pro CypherMind
+   - Budget wird automatisch berechnet: Durchschnittsbudget der laufenden Bots, aber max. 40% des verfügbaren Kapitals
+   - Beispiel: `start_autonomous_bot(symbol="ETHUSDT", strategy="combined")`
+   - Siehe: [AUTONOMOUS_BOTS.md](AUTONOMOUS_BOTS.md) für Details
+
+9. **get_autonomous_bots_status()** - Status aller autonomen Bots abrufen
+   - Zeigt Performance und Learning-Progress
+   - Beispiel: `get_autonomous_bots_status()`
+
 ## CypherTrade - Trade Execution Tools
 
 CypherTrade hat Zugriff auf folgende Tools für sichere Trade-Ausführung:
@@ -48,6 +70,19 @@ NexusChat hat Zugriff auf folgende Tools für Benutzer-Information:
 3. **get_trade_history(limit)** - Letzte Trades anzeigen
 
 4. **get_recent_analyses(limit)** - Marktanalysen für Benutzer erklären
+
+5. **get_crypto_news(limit, symbols, query)** - Aktuelle Krypto-News von vertrauenswürdigen Quellen
+   - Beispiel: `get_crypto_news(limit=10, symbols=["BTC", "ETH"])`
+   - Quellen: CoinDesk, CoinTelegraph, CryptoSlate, Decrypt, The Block
+   - Automatische Spam/Fake-News-Filterung
+   - Rate Limiting: max. 10 Requests/Minute pro Quelle
+   - Siehe: [CRYPTO_NEWS_SYSTEM.md](CRYPTO_NEWS_SYSTEM.md) für Details
+
+6. **share_news_with_agents(articles, target_agents, priority)** - Wichtige News an andere Agents weiterleiten
+   - Beispiel: `share_news_with_agents(articles=[...], target_agents=["both"], priority="high")`
+   - Teilt News mit CypherMind (für Trading-Entscheidungen) und/oder CypherTrade (für Risikomanagement)
+   - Nur wirklich relevante News weiterleiten (Regulation, Major Events, Security-Breaches, etc.)
+   - Siehe: [CRYPTO_NEWS_SYSTEM.md](CRYPTO_NEWS_SYSTEM.md) für Details
 
 ## Wichtig für CypherMind
 

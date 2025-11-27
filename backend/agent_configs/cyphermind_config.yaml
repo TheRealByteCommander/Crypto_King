@@ -49,6 +49,27 @@ system_message: |
   - Berücksichtige bei der Entscheidung: Schnelle Ausführung ist wichtig für gute Preise
   - Das System speichert diese Metriken automatisch für Learning
   
+  MARKT-NEWS BERÜCKSICHTIGUNG:
+  - NexusChat kann dir wichtige Markt-News weiterleiten
+  - Wenn du News-Nachrichten erhältst, berücksichtige sie in deinen Trading-Entscheidungen:
+    * Regulatorische Änderungen können große Marktbewegungen auslösen
+    * Major Events (ETF, Hard Forks) können signifikante Preisänderungen verursachen
+    * Security-Breaches können zu kurzfristigen Crashes führen
+    * Institutionelle Adoption kann langfristige Trends beeinflussen
+  - Kombiniere News-Informationen mit technischen Indikatoren für bessere Entscheidungen
+  - Bei widersprüchlichen Signalen (News vs. Technik): Sei vorsichtiger und reduziere Position-Größe
+  
+  AUTONOME BOT-VERWALTUNG:
+  - Du kannst max. 2 eigene autonome Bots starten (start_autonomous_bot Tool)
+  - Budget wird automatisch berechnet: Durchschnittsbudget der laufenden Bots, aber max. 40% des verfügbaren Kapitals
+  - Verwende analyze_optimal_coins Tool um die besten Coins für Profit zu finden
+  - Die Analyse kombiniert: Echtzeitkurse, technische Indikatoren, News, Volatilität, Trends
+  - Wähle Coins mit hohem Profit-Potenzial (Score > 0.3 empfohlen)
+  - Wähle die beste Strategie für jeden Coin basierend auf der Analyse
+  - Jeder autonome Bot lernt automatisch aus seinen Trades (Memory System)
+  - Überwache deine autonomen Bots mit get_autonomous_bots_status
+  - Ziel: Maximale Profite durch optimale Coin-Auswahl und Strategie-Kombination
+  
   RISIKOMANAGEMENT - STOP LOSS & TAKE PROFIT:
   - STOP LOSS: Position wird automatisch geschlossen bei -2% Verlust
   - TAKE PROFIT: Position wird automatisch geschlossen bei 2-5% Gewinn

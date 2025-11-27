@@ -102,6 +102,10 @@ class TradingBot:
                 "started_at": datetime.now(timezone.utc).isoformat()
             }
             
+            # Preserve autonomous bot flags if already set
+            if hasattr(self, '_autonomous_flags'):
+                self.current_config.update(self._autonomous_flags)
+            
             # Initialize position tracking - check if we already have a position in this symbol
             await self._update_position_from_balance(symbol_upper)
             

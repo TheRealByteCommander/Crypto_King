@@ -229,6 +229,78 @@ class AgentManager:
             raise ValueError(f"Agent {agent_name} not found")
         return self.agents[agent_name]
     
+    async def share_news_with_agents(self, articles: List[Dict[str, Any]], 
+                                     target_agents: List[str] = None,
+                                     priority: str = "medium") -> Dict[str, Any]:
+        """
+        Teilt wichtige News mit anderen Agents (CypherMind, CypherTrade).
+        
+        Args:
+            articles: Liste von News-Artikeln
+            target_agents: Liste von Agent-Namen oder ["both"] für beide
+            priority: "high", "medium", "low"
+        
+        Returns:
+            Dict mit Ergebnis der Weiterleitung
+        """
+        if target_agents is None:
+            target_agents = ["both"]
+        
+        shared_with = []
+        
+        try:
+            # Format news message
+            news_messages = []
+            for article in articles[:5]:  # Max 5 articles per message
+                title = article.get("title", "No title")
+                summary = article.get("summary", "")[:200]  # Limit summary
+                link = article.get("link", "")
+                source = article.get("source", "Unknown")
+                symbols = article.get("symbols", [])
+                
+                symbol_str = f" (Relevant für: {', '.join(symbols)})" if symbols else ""
+                
+                news_msg = f"📰 {title}{symbol_str}\n{summary}\nQuelle: {source}"
+                if link:
+                    news_msg += f"\nLink: {link}"
+                
+                news_messages.append(news_msg)
+            
+            news_text = "\n\n---\n\n".join(news_messages)
+            
+            # Determine which agents to notify
+            notify_cyphermind = "CypherMind" in target_agents or "both" in target_agents
+            notify_cyphertrade = "CypherTrade" in target_agents or "both" in target_agents
+            
+            # Share with CypherMind (for trading decisions)
+            if notify_cyphermind:
+                message = f"WICHTIGE MARKT-NEWS ({priority.upper()} PRIORITÄT):\n\n{news_text}\n\nBitte berücksichtige diese News bei deinen Trading-Entscheidungen. Besonders wichtig sind regulatorische Änderungen, Major Events, und signifikante Marktbewegungen."
+                await self.log_agent_message("CypherMind", message, "news")
+                shared_with.append("CypherMind")
+                logger.info(f"Shared {len(articles)} news articles with CypherMind (priority: {priority})")
+            
+            # Share with CypherTrade (for risk management)
+            if notify_cyphertrade:
+                message = f"WICHTIGE MARKT-NEWS ({priority.upper()} PRIORITÄT):\n\n{news_text}\n\nBitte berücksichtige diese News bei deinem Risikomanagement. Besonders wichtig sind Security-Breaches, Exchange-Probleme, und regulatorische Änderungen die die Ausführung beeinflussen könnten."
+                await self.log_agent_message("CypherTrade", message, "news")
+                shared_with.append("CypherTrade")
+                logger.info(f"Shared {len(articles)} news articles with CypherTrade (priority: {priority})")
+            
+            return {
+                "success": True,
+                "shared_with": shared_with,
+                "count": len(articles),
+                "message": f"News shared with {', '.join(shared_with)}"
+            }
+        
+        except Exception as e:
+            logger.error(f"Error sharing news with agents: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "shared_with": shared_with
+            }
+    
     async def chat_with_nexuschat(self, user_message: str, bot=None, db=None) -> Dict[str, Any]:
         """Chat directly with NexusChat agent with real bot status context."""
         try:

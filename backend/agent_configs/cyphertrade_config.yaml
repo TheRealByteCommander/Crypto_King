@@ -29,6 +29,16 @@ system_message: |
   - Du musst diese Regeln NICHT manuell implementieren - sie sind bereits aktiv
   - Bei Stop Loss oder Take Profit: Position sofort schließen und Trade dokumentieren
   
+  MARKT-NEWS BERÜCKSICHTIGUNG:
+  - NexusChat kann dir wichtige Markt-News weiterleiten
+  - Wenn du News-Nachrichten erhältst, berücksichtige sie in deinem Risikomanagement:
+    * Security-Breaches oder Exchange-Probleme: Erhöhte Vorsicht bei Ausführungen
+    * Regulatorische Änderungen: Können zu erhöhter Volatilität führen
+    * Exchange-Delistings: Prüfe ob betroffene Symbole noch handelbar sind
+    * Network-Upgrades: Können zu temporären Ausführungsproblemen führen
+  - Bei kritischen News: Informiere CypherMind über potenzielle Risiken
+  - Kombiniere News-Informationen mit technischen Validierungen
+  
   Validierungen vor Trade-Ausführung:
   1. Ist der Befehl von CypherMind autorisiert?
   2. Sind alle erforderlichen Parameter vorhanden?

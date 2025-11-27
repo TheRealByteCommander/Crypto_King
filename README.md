@@ -29,8 +29,8 @@ http://localhost:3000
 ## ✨ Features
 
 ### 🤖 Multi-Agent System
-- **NexusChat** - User Interface Agent
-- **CypherMind** - Decision & Strategy Agent  
+- **NexusChat** - User Interface Agent (mit sicherem Krypto-News-Zugriff)
+- **CypherMind** - Decision & Strategy Agent (kann autonome Bots starten)
 - **CypherTrade** - Trade Execution Agent
 
 ### 💹 Trading Features
@@ -64,6 +64,7 @@ http://localhost:3000
 - **Agent Tools System** (Funktionsaufrufe für Agents)
 - **Memory & Learning System** (Agents lernen aus Trades)
 - **MCP Server** (Model Context Protocol Integration)
+- **Sicheres News-System** (NexusChat: Whitelist-basierte Krypto-News mit Spam-Filter)
 
 ---
 
@@ -98,6 +99,8 @@ http://localhost:3000
 | [AGENT_TOOLS.md](AGENT_TOOLS.md) | 🛠️ Agent Tools & Funktionsaufrufe |
 | [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) | 🧠 AI Learning & Memory System |
 | [MCP_SERVER.md](MCP_SERVER.md) | 🔌 MCP Server Integration |
+| [CRYPTO_NEWS_SYSTEM.md](CRYPTO_NEWS_SYSTEM.md) | 📰 Sicheres Krypto-News-System für NexusChat |
+| [AUTONOMOUS_BOTS.md](AUTONOMOUS_BOTS.md) | 🤖 Autonome Bot-Verwaltung durch CypherMind |
 | [frontend/README.md](frontend/README.md) | 🎨 Frontend & Features |
 
 ---
