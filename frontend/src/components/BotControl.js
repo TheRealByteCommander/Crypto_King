@@ -134,6 +134,16 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
                       <span className="text-xs text-slate-400 font-mono">
                         ID: {bot.botId.substring(0, 8)}...
                       </span>
+                      {bot.config?.autonomous && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                          🤖 Autonomous
+                        </span>
+                      )}
+                      {bot.config?.started_by === "CypherMind" && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                          🧠 CypherMind
+                        </span>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm mb-4">
                       <div>
