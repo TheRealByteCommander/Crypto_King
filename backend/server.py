@@ -24,6 +24,7 @@ from constants import BOT_BROADCAST_INTERVAL_SECONDS
 from validators import validate_all_services, validate_mongodb_connection
 from mcp_server import create_mcp_server
 from autonomous_manager import AutonomousManager
+from trading_pairs_cache import get_trading_pairs_cache
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -882,9 +883,17 @@ async def startup_event():
         await autonomous_manager.start()
         logger.info("Autonomous Manager started - CypherMind arbeitet jetzt autonom")
         
+        # Initialize Trading Pairs Cache
+        try:
+            trading_pairs_cache = get_trading_pairs_cache(binance_client)
+            await trading_pairs_cache.start()
+            logger.info("Trading Pairs Cache started - wird alle 2 Stunden aktualisiert")
+        except Exception as e:
+            logger.warning(f"Could not start Trading Pairs Cache: {e}")
+        
         # Update Binance-Client wenn ein Bot startet
         async def update_autonomous_manager_binance_client():
-            """Aktualisiert den Binance-Client im AutonomousManager wenn ein Bot startet."""
+            """Aktualisiert den Binance-Client im AutonomousManager und Trading Pairs Cache wenn ein Bot startet."""
             if autonomous_manager and not autonomous_manager.binance_client:
                 all_bots = bot_manager.get_all_bots()
                 for bot in all_bots.values():
@@ -892,6 +901,21 @@ async def startup_event():
                         autonomous_manager.binance_client = bot.binance_client
                         logger.info("Autonomous Manager Binance client updated")
                         break
+            
+            # Update Trading Pairs Cache Binance client
+            try:
+                trading_pairs_cache = get_trading_pairs_cache()
+                if trading_pairs_cache and not trading_pairs_cache.binance_client:
+                    all_bots = bot_manager.get_all_bots()
+                    for bot in all_bots.values():
+                        if bot.binance_client:
+                            trading_pairs_cache.binance_client = bot.binance_client
+                            if not trading_pairs_cache.update_task:
+                                await trading_pairs_cache.start()
+                            logger.info("Trading Pairs Cache Binance client updated")
+                            break
+            except Exception as e:
+                logger.warning(f"Could not update Trading Pairs Cache: {e}")
         
         # Speichere Update-Funktion für später
         bot_manager._update_autonomous_manager = update_autonomous_manager_binance_client

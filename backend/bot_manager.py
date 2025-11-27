@@ -399,7 +399,7 @@ class TradingBot:
             trading_mode_upper = trading_mode.upper() if trading_mode else "SPOT"
             
             if trading_mode_upper == "SPOT":
-                base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                base_asset = BinanceClientWrapper.extract_base_asset(symbol)
                 balance = self.binance_client.get_account_balance(base_asset, trading_mode_upper)
                 
                 if balance > 0:
@@ -487,7 +487,7 @@ class TradingBot:
                 # Force close position
                 if self.position == "LONG":
                     # Execute SELL to close LONG
-                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    base_asset = BinanceClientWrapper.extract_base_asset(symbol)
                     balance = self.binance_client.get_account_balance(base_asset, trading_mode)
                     if balance > 0:
                         quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
@@ -606,7 +606,7 @@ class TradingBot:
                 # Force close position
                 if self.position == "LONG":
                     # Execute SELL to close LONG
-                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    base_asset = BinanceClientWrapper.extract_base_asset(symbol)
                     balance = self.binance_client.get_account_balance(base_asset, trading_mode)
                     if balance > 0:
                         quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
@@ -835,14 +835,17 @@ class TradingBot:
                     # Get symbol info for better error message
                     symbol_info = self.binance_client.get_symbol_info(symbol)
                     min_notional = symbol_info.get('min_notional', 10.0)
-                    balance = self.binance_client.get_account_balance("USDT", trading_mode)
+                    
+                    # Extract quote asset from symbol
+                    quote_asset = BinanceClientWrapper.extract_quote_asset(symbol)
+                    balance = self.binance_client.get_account_balance(quote_asset, trading_mode)
                     
                     error_msg = f"⚠️ Cannot execute BUY order for {symbol}. "
                     if available_amount < min_notional:
-                        error_msg += f"Available budget {available_amount:.2f} USDT is below minimum notional {min_notional:.2f} USDT. "
+                        error_msg += f"Available budget {available_amount:.8f} {quote_asset} is below minimum notional {min_notional:.8f} {quote_asset}. "
                     if balance < min_notional:
-                        error_msg += f"Balance {balance:.2f} USDT is below minimum notional {min_notional:.2f} USDT. "
-                    error_msg += f"(Total spent: {total_spent:.2f}/{configured_amount:.2f} USDT)"
+                        error_msg += f"Balance {balance:.8f} {quote_asset} is below minimum notional {min_notional:.8f} {quote_asset}. "
+                    error_msg += f"(Total spent: {total_spent:.8f}/{configured_amount:.8f} {quote_asset})"
                     
                     logger.warning(f"Bot {self.bot_id}: {error_msg}")
                     await self.agent_manager.log_agent_message(
@@ -854,29 +857,32 @@ class TradingBot:
                 
                 # Final quantity validation
                 final_order_value = quantity * current_price
-                balance = self.binance_client.get_account_balance("USDT", trading_mode)
+                
+                # Extract quote asset from symbol (e.g., SOLBTC -> BTC, ETHUSDT -> USDT)
+                quote_asset = BinanceClientWrapper.extract_quote_asset(symbol)
+                balance = self.binance_client.get_account_balance(quote_asset, trading_mode)
                 
                 # Double-check balance
                 if balance < final_order_value:
-                    logger.warning(f"Bot {self.bot_id}: Insufficient USDT balance ({trading_mode}). Required: {final_order_value:.2f}, Available: {balance:.2f}")
+                    logger.warning(f"Bot {self.bot_id}: Insufficient {quote_asset} balance ({trading_mode}). Required: {final_order_value:.8f}, Available: {balance:.8f}")
                     await self.agent_manager.log_agent_message(
                         "CypherTrade",
-                        f"⚠️ Insufficient USDT balance. Required: {final_order_value:.2f} USDT, Available: {balance:.2f} USDT. Skipping BUY trade.",
+                        f"⚠️ Insufficient {quote_asset} balance. Required: {final_order_value:.8f} {quote_asset}, Available: {balance:.8f} {quote_asset}. Skipping BUY trade.",
                         "warning"
                     )
                     return
                 
                 # Double-check budget limit
                 if final_order_value > available_amount:
-                    logger.warning(f"Bot {self.bot_id}: Order value {final_order_value:.2f} USDT exceeds available budget {available_amount:.2f} USDT")
+                    logger.warning(f"Bot {self.bot_id}: Order value {final_order_value:.8f} {quote_asset} exceeds available budget {available_amount:.8f} {quote_asset}")
                     await self.agent_manager.log_agent_message(
                         "CypherTrade",
-                        f"⚠️ Order value {final_order_value:.2f} USDT exceeds available budget {available_amount:.2f} USDT. Skipping BUY trade.",
+                        f"⚠️ Order value {final_order_value:.8f} {quote_asset} exceeds available budget {available_amount:.8f} {quote_asset}. Skipping BUY trade.",
                         "warning"
                     )
                     return
                 
-                logger.info(f"Bot {self.bot_id}: Executing BUY order - Quantity: {quantity}, Value: {final_order_value:.2f} USDT, Budget: {total_spent:.2f}/{configured_amount:.2f} USDT (Remaining: {available_amount - final_order_value:.2f} USDT)")
+                logger.info(f"Bot {self.bot_id}: Executing BUY order - Quantity: {quantity}, Value: {final_order_value:.8f} {quote_asset}, Budget: {total_spent:.8f}/{configured_amount:.8f} {quote_asset} (Remaining: {available_amount - final_order_value:.8f} {quote_asset})")
                 
                 # Execute order
                 execution_start_time = datetime.now(timezone.utc)
@@ -969,7 +975,7 @@ class TradingBot:
                 # Check current position
                 if self.position == "LONG":
                     # We have a LONG position - close it
-                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    base_asset = BinanceClientWrapper.extract_base_asset(symbol)
                     balance = self.binance_client.get_account_balance(base_asset, trading_mode)
                     
                     if balance <= 0:

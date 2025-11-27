@@ -429,6 +429,49 @@ class BinanceClientWrapper:
             logger.error(f"Error getting symbol info for {symbol}: {e}")
             return {}
     
+    @staticmethod
+    def extract_quote_asset(symbol: str) -> str:
+        """
+        Extrahiert das Quote-Asset aus einem Trading-Symbol.
+        
+        Args:
+            symbol: Trading-Symbol (z.B. "SOLBTC", "ETHUSDT", "BNBBTC")
+        
+        Returns:
+            Quote-Asset (z.B. "BTC", "USDT", "ETH", "BUSD", "BNB")
+        """
+        symbol_upper = symbol.upper()
+        
+        # Bekannte Quote-Assets (sortiert nach Länge, längere zuerst)
+        quote_assets = ["USDT", "BUSD", "USDC", "TUSD", "BTC", "ETH", "BNB", "DAI", "PAX", "USDP"]
+        
+        for quote in quote_assets:
+            if symbol_upper.endswith(quote):
+                return quote
+        
+        # Fallback: Versuche aus Exchange Info zu holen (wenn Client verfügbar)
+        # Für statische Extraktion: Default zu USDT
+        logger.warning(f"Could not extract quote asset from {symbol}, defaulting to USDT")
+        return "USDT"
+    
+    @staticmethod
+    def extract_base_asset(symbol: str) -> str:
+        """
+        Extrahiert das Base-Asset aus einem Trading-Symbol.
+        
+        Args:
+            symbol: Trading-Symbol (z.B. "SOLBTC", "ETHUSDT", "BNBBTC")
+        
+        Returns:
+            Base-Asset (z.B. "SOL", "ETH", "BNB")
+        """
+        symbol_upper = symbol.upper()
+        quote_asset = BinanceClientWrapper.extract_quote_asset(symbol_upper)
+        if quote_asset:
+            base_asset = symbol_upper[:-len(quote_asset)]
+            return base_asset
+        return symbol_upper
+    
     def get_tradable_symbols(self) -> List[Dict[str, Any]]:
         """Get all tradable symbols from Binance (all trading types and quote assets)."""
         try:
@@ -643,31 +686,40 @@ class BinanceClientWrapper:
                                         current_price: float, trading_mode: str = "SPOT") -> Optional[float]:
         """
         Calculate optimal order quantity considering:
-        - Available budget in USDT
+        - Available budget in quote asset (USDT, BTC, ETH, etc.)
         - Binance LOT_SIZE filter
         - Binance MIN_NOTIONAL filter
         - Available balance
         
+        Args:
+            symbol: Trading symbol (e.g., "SOLBTC", "ETHUSDT")
+            available_budget_usdt: Available budget in quote asset (the amount parameter)
+            current_price: Current price of the symbol
+            trading_mode: Trading mode (SPOT, MARGIN, FUTURES)
+        
         Returns optimal quantity or None if order cannot be executed.
         """
         try:
-            # Get available balance
-            balance_usdt = self.get_account_balance("USDT", trading_mode)
+            # Extract quote asset from symbol
+            quote_asset = self.extract_quote_asset(symbol)
+            
+            # Get available balance for the quote asset
+            balance_quote = self.get_account_balance(quote_asset, trading_mode)
             
             # Use the minimum of budget and balance
-            max_usable_amount = min(available_budget_usdt, balance_usdt)
+            max_usable_amount = min(available_budget_usdt, balance_quote)
             
             if max_usable_amount <= 0:
-                logger.warning(f"No available budget or balance. Budget: {available_budget_usdt:.2f}, Balance: {balance_usdt:.2f}")
+                logger.warning(f"No available budget or balance for {symbol}. Budget: {available_budget_usdt:.8f} {quote_asset}, Balance: {balance_quote:.8f} {quote_asset}")
                 return None
             
             # Get symbol info for filters
             symbol_info = self.get_symbol_info(symbol)
-            min_notional = symbol_info.get('min_notional', 10.0)  # Default to 10 USDT if not found
+            min_notional = symbol_info.get('min_notional', 10.0)  # Default to 10 if not found (in quote asset)
             
             # Check if available amount meets minimum notional
             if max_usable_amount < min_notional:
-                logger.warning(f"Available amount {max_usable_amount:.2f} USDT is below minimum notional {min_notional:.2f} USDT for {symbol}")
+                logger.warning(f"Available amount {max_usable_amount:.8f} {quote_asset} is below minimum notional {min_notional:.8f} {quote_asset} for {symbol}")
                 return None
             
             # Calculate quantity from available amount
@@ -678,6 +730,8 @@ class BinanceClientWrapper:
             
             # Adjust to meet notional requirement (with budget constraint)
             adjusted_quantity = self.adjust_quantity_to_notional(symbol, quantity, current_price, max_value_usdt=max_usable_amount)
+            
+            # Note: max_value_usdt parameter name is kept for backward compatibility, but it now represents the quote asset amount
             
             if adjusted_quantity is None:
                 logger.warning(f"Cannot calculate valid quantity for {symbol} with budget {max_usable_amount:.2f} USDT")

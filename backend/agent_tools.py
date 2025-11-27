@@ -6,6 +6,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from binance_client import BinanceClientWrapper
 from binance.exceptions import BinanceAPIException
+from trading_pairs_cache import get_trading_pairs_cache
 
 # Optional imports for news and coin analysis features
 try:
@@ -137,16 +138,48 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "validate_symbol",
-                    "description": "Validate if a trading symbol exists and is tradable on Binance. Use this before suggesting trades or answering questions about specific cryptocurrencies.",
+                    "description": "Validate if a trading symbol exists and is tradable on Binance. Supports all quote assets (USDT, BTC, ETH, BUSD, BNB, etc.). Use this before suggesting trades or answering questions about specific cryptocurrencies.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "symbol": {
                                 "type": "string",
-                                "description": "The trading symbol to validate (e.g., BTCUSDT, DOGEUSDT, SHIBUSDT)"
+                                "description": "The trading symbol to validate (e.g., BTCUSDT, SOLBTC, ETHBTC, DOGEUSDT, SHIBUSDT)"
                             }
                         },
                         "required": ["symbol"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_available_trading_pairs",
+                    "description": "Get all available trading pairs from cached data (updated every 2 hours). Supports filtering by base asset, quote asset, or search query. Use this to quickly check which trading pairs are available without making API calls.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "base_asset": {
+                                "type": "string",
+                                "description": "Optional: Filter by base asset (e.g., 'SOL' returns all SOL pairs: SOLUSDT, SOLBTC, SOLETH, etc.)"
+                            },
+                            "quote_asset": {
+                                "type": "string",
+                                "description": "Optional: Filter by quote asset (e.g., 'BTC' returns all BTC pairs: SOLBTC, ETHBTC, BNBBTC, etc.)"
+                            },
+                            "search": {
+                                "type": "string",
+                                "description": "Optional: Search query to find pairs containing this text (e.g., 'SOL', 'BTC')"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum number of results to return (default: 50, max: 200)",
+                                "default": 50,
+                                "minimum": 1,
+                                "maximum": 200
+                            }
+                        },
+                        "required": []
                     }
                 }
             },
@@ -320,6 +353,55 @@ class AgentTools:
                             }
                         },
                         "required": ["symbol", "order_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_available_trading_pairs",
+                    "description": "Get all available trading pairs from cached data (updated every 2 hours). Supports filtering by base asset, quote asset, or search query. Use this to quickly check which trading pairs are available for trade execution.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "base_asset": {
+                                "type": "string",
+                                "description": "Optional: Filter by base asset (e.g., 'SOL' returns all SOL pairs: SOLUSDT, SOLBTC, SOLETH, etc.)"
+                            },
+                            "quote_asset": {
+                                "type": "string",
+                                "description": "Optional: Filter by quote asset (e.g., 'BTC' returns all BTC pairs: SOLBTC, ETHBTC, BNBBTC, etc.)"
+                            },
+                            "search": {
+                                "type": "string",
+                                "description": "Optional: Search query to find pairs containing this text (e.g., 'SOL', 'BTC')"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum number of results to return (default: 50, max: 200)",
+                                "default": 50,
+                                "minimum": 1,
+                                "maximum": 200
+                            }
+                        },
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "validate_symbol",
+                    "description": "Validate if a trading symbol exists and is tradable on Binance. Supports all quote assets (USDT, BTC, ETH, BUSD, BNB, etc.). Use this before executing trades to ensure the symbol is valid.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string",
+                                "description": "The trading symbol to validate (e.g., BTCUSDT, SOLBTC, ETHBTC, DOGEUSDT)"
+                            }
+                        },
+                        "required": ["symbol"]
                     }
                 }
             }
@@ -596,11 +678,27 @@ class AgentTools:
                 return {"success": True, "count": len(symbols), "symbols": symbols}
             
             elif tool_name == "validate_symbol":
+                symbol = parameters.get("symbol", "").upper()
+                
+                # Try cache first (faster)
+                if self.trading_pairs_cache:
+                    try:
+                        is_available = self.trading_pairs_cache.is_pair_available(symbol)
+                        if is_available:
+                            return {
+                                "success": True,
+                                "symbol": symbol,
+                                "is_tradable": True,
+                                "message": f"{symbol} is valid and tradable (from cache)"
+                            }
+                    except Exception as e:
+                        logger.warning(f"Error checking cache for symbol {symbol}: {e}")
+                
+                # Fallback to direct API validation
                 if self.binance_client is None:
                     # Try to create a temporary client for this request
                     try:
                         temp_client = BinanceClientWrapper()
-                        symbol = parameters.get("symbol", "").upper()
                         is_tradable, error_msg = temp_client.is_symbol_tradable(symbol)
                         return {
                             "success": True,
@@ -610,7 +708,6 @@ class AgentTools:
                         }
                     except Exception as e:
                         return {"error": f"Binance client not available: {str(e)}", "success": False}
-                symbol = parameters.get("symbol", "").upper()
                 is_tradable, error_msg = self.binance_client.is_symbol_tradable(symbol)
                 return {
                     "success": True,
