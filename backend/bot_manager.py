@@ -794,6 +794,32 @@ class TradingBot:
             symbol = self.current_config["symbol"]
             configured_amount = self.current_config["amount"]
             
+            # CRITICAL: Check stop loss and take profit BEFORE executing any new trade
+            # This ensures positions are closed immediately when thresholds are reached,
+            # even if a new signal comes in between the 5-minute bot loop checks
+            if self.position is not None and self.position_entry_price > 0:
+                current_price = self.binance_client.get_current_price(symbol)
+                trading_mode = self.current_config.get("trading_mode", "SPOT")
+                
+                # Calculate P&L percentage
+                if self.position == "LONG":
+                    pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                elif self.position == "SHORT":
+                    pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                else:
+                    pnl_percent = 0
+                
+                # If position is at stop loss or take profit, close it first
+                if pnl_percent <= STOP_LOSS_PERCENT or (TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT):
+                    logger.warning(f"Bot {self.bot_id}: Position at {pnl_percent:.2f}% P&L (Stop-Loss: {STOP_LOSS_PERCENT}%, Take-Profit: {TAKE_PROFIT_MIN_PERCENT}-{TAKE_PROFIT_MAX_PERCENT}%). Closing position before executing new trade.")
+                    await self._check_stop_loss_and_take_profit(symbol, analysis)
+                    # After closing position, check if we should still execute the new trade
+                    # For BUY: continue (opening new position is fine)
+                    # For SELL: skip (position already closed)
+                    if signal == "SELL" and self.position is None:
+                        logger.info(f"Bot {self.bot_id}: Position closed due to Stop-Loss/Take-Profit. Skipping SELL signal (no position to close).")
+                        return
+            
             # Track execution timing
             execution_timestamp = datetime.now(timezone.utc)
             delay_seconds = None
@@ -1045,9 +1071,18 @@ class TradingBot:
                     # Calculate profit/loss
                     pnl = None
                     pnl_percent = None
+                    exit_reason = "SIGNAL"  # Default: closed by signal
                     if self.position_entry_price > 0:
                         pnl = (execution_price - self.position_entry_price) * quantity
                         pnl_percent = ((execution_price - self.position_entry_price) / self.position_entry_price) * 100
+                        
+                        # Check if this trade should be marked as Stop-Loss or Take-Profit
+                        if pnl_percent <= STOP_LOSS_PERCENT:
+                            exit_reason = "STOP_LOSS"
+                            logger.warning(f"Bot {self.bot_id}: SELL executed but position was at {pnl_percent:.2f}% (Stop-Loss threshold: {STOP_LOSS_PERCENT}%). Marking as STOP_LOSS.")
+                        elif TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT:
+                            exit_reason = "TAKE_PROFIT"
+                            logger.info(f"Bot {self.bot_id}: SELL executed but position was at {pnl_percent:.2f}% (Take-Profit range: {TAKE_PROFIT_MIN_PERCENT}-{TAKE_PROFIT_MAX_PERCENT}%). Marking as TAKE_PROFIT.")
                     
                     # Save trade
                     trade = {
@@ -1069,6 +1104,7 @@ class TradingBot:
                         "execution_delay_seconds": execution_delay_seconds,  # Delay in seconds
                         "strategy": self.current_config["strategy"],
                         "trading_mode": trading_mode,
+                        "exit_reason": exit_reason,  # Mark as STOP_LOSS, TAKE_PROFIT, or SIGNAL
                         "confidence": analysis.get("confidence", 0.0),
                         "indicators": analysis.get("indicators", {}),
                         "timestamp": execution_end_time.isoformat()
@@ -1148,9 +1184,18 @@ class TradingBot:
                     # Calculate profit/loss (for SHORT: profit when price goes down)
                     pnl = None
                     pnl_percent = None
+                    exit_reason = "SIGNAL"  # Default: closed by signal
                     if self.position_entry_price > 0:
                         pnl = (self.position_entry_price - execution_price) * quantity
                         pnl_percent = ((self.position_entry_price - execution_price) / self.position_entry_price) * 100
+                        
+                        # Check if this trade should be marked as Stop-Loss or Take-Profit
+                        if pnl_percent <= STOP_LOSS_PERCENT:
+                            exit_reason = "STOP_LOSS"
+                            logger.warning(f"Bot {self.bot_id}: BUY to close SHORT executed but position was at {pnl_percent:.2f}% (Stop-Loss threshold: {STOP_LOSS_PERCENT}%). Marking as STOP_LOSS.")
+                        elif TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT:
+                            exit_reason = "TAKE_PROFIT"
+                            logger.info(f"Bot {self.bot_id}: BUY to close SHORT executed but position was at {pnl_percent:.2f}% (Take-Profit range: {TAKE_PROFIT_MIN_PERCENT}-{TAKE_PROFIT_MAX_PERCENT}%). Marking as TAKE_PROFIT.")
                     
                     # Save trade
                     trade = {
@@ -1173,6 +1218,7 @@ class TradingBot:
                         "strategy": self.current_config["strategy"],
                         "trading_mode": trading_mode,
                         "position_type": "SHORT_CLOSE",
+                        "exit_reason": exit_reason,  # Mark as STOP_LOSS, TAKE_PROFIT, or SIGNAL
                         "confidence": analysis.get("confidence", 0.0),
                         "indicators": analysis.get("indicators", {}),
                         "timestamp": execution_end_time.isoformat()
