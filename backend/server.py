@@ -519,8 +519,9 @@ async def get_agent_logs(limit: int = 100):
         logs = await db.agent_logs.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
         return logs
     except Exception as e:
-        logger.error(f"Error getting logs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting logs: {e}", exc_info=True)
+        # Return empty list instead of raising exception to prevent frontend hanging
+        return []
 
 @api_router.get("/analyses", response_model=List[Analysis])
 async def get_analyses(limit: int = 50):
