@@ -6,8 +6,23 @@ import logging
 from typing import Dict, Any, Optional, List
 from binance_client import BinanceClientWrapper
 from binance.exceptions import BinanceAPIException
-from crypto_news_fetcher import get_news_fetcher
-from coin_analyzer import CoinAnalyzer
+
+# Optional imports for news and coin analysis features
+try:
+    from crypto_news_fetcher import get_news_fetcher
+    NEWS_FETCHER_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"crypto_news_fetcher not available: {e}. News features will be disabled.")
+    NEWS_FETCHER_AVAILABLE = False
+    get_news_fetcher = None
+
+try:
+    from coin_analyzer import CoinAnalyzer
+    COIN_ANALYZER_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"coin_analyzer not available: {e}. Coin analysis features will be disabled.")
+    COIN_ANALYZER_AVAILABLE = False
+    CoinAnalyzer = None
 
 logger = logging.getLogger(__name__)
 
@@ -605,6 +620,11 @@ class AgentTools:
                 }
             
             elif tool_name == "get_crypto_news":
+                if not NEWS_FETCHER_AVAILABLE:
+                    return {
+                        "error": "News feature not available. Please install dependencies: pip install feedparser beautifulsoup4",
+                        "success": False
+                    }
                 try:
                     news_fetcher = get_news_fetcher()
                     limit = parameters.get("limit", 10)

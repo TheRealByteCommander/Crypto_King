@@ -10,8 +10,21 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from collections import defaultdict
 import httpx
-from bs4 import BeautifulSoup
-import feedparser
+
+# Optional imports for news features
+try:
+    from bs4 import BeautifulSoup
+    BEAUTIFULSOUP_AVAILABLE = True
+except ImportError:
+    BEAUTIFULSOUP_AVAILABLE = False
+    BeautifulSoup = None
+
+try:
+    import feedparser
+    FEEDPARSER_AVAILABLE = True
+except ImportError:
+    FEEDPARSER_AVAILABLE = False
+    feedparser = None
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +129,8 @@ class CryptoNewsFetcher:
     
     def _extract_article_content(self, html: str) -> str:
         """Extrahiert den Hauptinhalt aus HTML."""
+        if not BEAUTIFULSOUP_AVAILABLE:
+            return ""
         try:
             soup = BeautifulSoup(html, 'html.parser')
             
@@ -144,6 +159,10 @@ class CryptoNewsFetcher:
     
     async def fetch_rss_feed(self, source_key: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Lädt News von einer RSS-Feed-Quelle."""
+        if not FEEDPARSER_AVAILABLE:
+            logger.error("feedparser not available. Please install: pip install feedparser")
+            return []
+        
         if source_key not in TRUSTED_SOURCES:
             logger.error(f"Source {source_key} not in whitelist")
             return []

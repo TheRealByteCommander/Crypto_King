@@ -8,8 +8,17 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 import pandas as pd
 from binance_client import BinanceClientWrapper
-from crypto_news_fetcher import get_news_fetcher
 from strategies import get_strategy
+
+# Optional import for news features
+try:
+    from crypto_news_fetcher import get_news_fetcher
+    NEWS_FETCHER_AVAILABLE = True
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(f"crypto_news_fetcher not available: {e}. News features will be disabled.")
+    NEWS_FETCHER_AVAILABLE = False
+    get_news_fetcher = None
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +27,7 @@ class CoinAnalyzer:
     
     def __init__(self, binance_client: BinanceClientWrapper):
         self.binance_client = binance_client
-        self.news_fetcher = get_news_fetcher()
+        self.news_fetcher = get_news_fetcher() if NEWS_FETCHER_AVAILABLE else None
     
     async def analyze_coin(self, symbol: str, strategies: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -142,27 +151,28 @@ class CoinAnalyzer:
             # 6. News-Analyse
             news_score = 0.0
             news_count = 0
-            try:
-                # Suche nach News für diesen Coin
-                base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
-                news_articles = await self.news_fetcher.fetch_news(
-                    symbols=[base_asset],
-                    limit_per_source=3,
-                    max_total=10
-                )
+            if self.news_fetcher:
+                try:
+                    # Suche nach News für diesen Coin
+                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    news_articles = await self.news_fetcher.fetch_news(
+                        symbols=[base_asset],
+                        limit_per_source=3,
+                        max_total=10
+                    )
+                    
+                    # Bewerte News
+                    for article in news_articles:
+                        importance = article.get("importance_score", 0.0)
+                        if importance > 0.5:  # Wichtige News
+                            news_score += importance * 0.2
+                            news_count += 1
+                    
+                    # Cap news_score
+                    news_score = min(news_score, 0.5)
                 
-                # Bewerte News
-                for article in news_articles:
-                    importance = article.get("importance_score", 0.0)
-                    if importance > 0.5:  # Wichtige News
-                        news_score += importance * 0.2
-                        news_count += 1
-                
-                # Cap news_score
-                news_score = min(news_score, 0.5)
-            
-            except Exception as e:
-                logger.warning(f"Error fetching news for {symbol}: {e}")
+                except Exception as e:
+                    logger.warning(f"Error fetching news for {symbol}: {e}")
             
             # 7. Gesamt-Score berechnen
             # Kombiniere: Strategie-Score (40%), Trend (20%), Volatilität (20%), News (20%)
