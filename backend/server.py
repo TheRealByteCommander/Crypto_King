@@ -23,6 +23,7 @@ from bot_manager import BotManager, TradingBot
 from constants import BOT_BROADCAST_INTERVAL_SECONDS
 from validators import validate_all_services, validate_mongodb_connection
 from mcp_server import create_mcp_server
+from autonomous_manager import AutonomousManager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -859,6 +860,44 @@ async def startup_event():
         logger.info("MongoDB connection validated on startup")
     
     asyncio.create_task(broadcast_updates())
+    
+    # Starte Autonomous Manager (wird Binance-Client später initialisieren)
+    global autonomous_manager
+    try:
+        # Versuche Binance-Client vom ersten Bot zu holen (falls vorhanden)
+        binance_client = None
+        all_bots = bot_manager.get_all_bots()
+        for bot in all_bots.values():
+            if bot.binance_client:
+                binance_client = bot.binance_client
+                break
+        
+        autonomous_manager = AutonomousManager(
+            agent_manager=agent_manager,
+            bot_manager=bot_manager,
+            db=db,
+            binance_client=binance_client
+        )
+        await autonomous_manager.start()
+        logger.info("Autonomous Manager started - CypherMind arbeitet jetzt autonom")
+        
+        # Update Binance-Client wenn ein Bot startet
+        async def update_autonomous_manager_binance_client():
+            """Aktualisiert den Binance-Client im AutonomousManager wenn ein Bot startet."""
+            if autonomous_manager and not autonomous_manager.binance_client:
+                all_bots = bot_manager.get_all_bots()
+                for bot in all_bots.values():
+                    if bot.binance_client:
+                        autonomous_manager.binance_client = bot.binance_client
+                        logger.info("Autonomous Manager Binance client updated")
+                        break
+        
+        # Speichere Update-Funktion für später
+        bot_manager._update_autonomous_manager = update_autonomous_manager_binance_client
+        
+    except Exception as e:
+        logger.warning(f"Could not start Autonomous Manager: {e}. Will retry when bot starts.")
+    
     logger.info("Project CypherTrade started successfully")
 
 # Include the router in the main app

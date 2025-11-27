@@ -115,6 +115,10 @@ class TradingBot:
             # Analyze historical market data before starting bot loop
             await self._analyze_historical_market_context(symbol_upper, strategy)
             
+            # Update AutonomousManager Binance client if available
+            if hasattr(self.agent_manager, 'bot') and hasattr(self.agent_manager.bot, '_update_autonomous_manager'):
+                await self.agent_manager.bot._update_autonomous_manager()
+            
             self.is_running = True
             
             # Start bot loop in background
