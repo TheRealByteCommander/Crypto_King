@@ -442,15 +442,51 @@ class AgentTools:
             {
                 "type": "function",
                 "function": {
+                    "name": "get_market_data",
+                    "description": "Get historical kline (candlestick) data for any trading symbol. Returns OHLCV (Open, High, Low, Close, Volume) data for technical analysis and learning. Use this to analyze price trends, patterns, and historical performance. Supports all timeframes from 1 minute to 1 month.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string",
+                                "description": "The trading symbol (e.g., BTCUSDT, ETHUSDT, SOLBTC)"
+                            },
+                            "interval": {
+                                "type": "string",
+                                "enum": ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"],
+                                "description": "The kline interval (timeframe). Use '1d' for daily data, '1h' for hourly, '5m' for 5-minute candles, etc. (default: 5m)",
+                                "default": "5m"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Number of historical candles to retrieve (default: 100, max: 1000). Use higher limits (e.g., 500-1000) for longer-term analysis.",
+                                "default": 100,
+                                "minimum": 1,
+                                "maximum": 1000
+                            }
+                        },
+                        "required": ["symbol"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_trade_history",
-                    "description": "Get recent trade history to show the user past trading activity.",
+                    "description": "Get recent trade history to show the user past trading activity. This includes all executed trades with their P&L, entry/exit prices, and outcomes.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "limit": {
                                 "type": "integer",
-                                "description": "Number of recent trades to retrieve (default: 10)",
-                                "default": 10
+                                "description": "Number of recent trades to retrieve (default: 10, max: 100)",
+                                "default": 10,
+                                "minimum": 1,
+                                "maximum": 100
+                            },
+                            "symbol": {
+                                "type": "string",
+                                "description": "Optional: Filter trades by symbol (e.g., 'BTCUSDT', 'ETHUSDT')"
                             }
                         },
                         "required": []
@@ -565,10 +601,25 @@ class AgentTools:
                     return {"error": "Symbol parameter is required", "success": False}
                 df = self.binance_client.get_market_data(symbol, interval, limit)
                 # Convert DataFrame to dict for JSON serialization
+                # Convert timestamps to ISO format strings
+                df_copy = df.copy()
+                if 'timestamp' in df_copy.columns:
+                    df_copy['timestamp'] = df_copy['timestamp'].apply(
+                        lambda x: x.isoformat() if hasattr(x, 'isoformat') else str(x)
+                    )
+                
                 result = {
                     "symbol": symbol,
                     "interval": interval,
                     "count": len(df),
+                    "oldest": {
+                        "timestamp": df.iloc[0]['timestamp'].isoformat() if hasattr(df.iloc[0]['timestamp'], 'isoformat') else str(df.iloc[0]['timestamp']),
+                        "open": float(df.iloc[0]['open']),
+                        "high": float(df.iloc[0]['high']),
+                        "low": float(df.iloc[0]['low']),
+                        "close": float(df.iloc[0]['close']),
+                        "volume": float(df.iloc[0]['volume'])
+                    },
                     "latest": {
                         "timestamp": df.iloc[-1]['timestamp'].isoformat() if hasattr(df.iloc[-1]['timestamp'], 'isoformat') else str(df.iloc[-1]['timestamp']),
                         "open": float(df.iloc[-1]['open']),
@@ -577,7 +628,7 @@ class AgentTools:
                         "close": float(df.iloc[-1]['close']),
                         "volume": float(df.iloc[-1]['volume'])
                     },
-                    "data": df.tail(20).to_dict('records')  # Last 20 candles
+                    "data": df_copy.to_dict('records')  # All candles (up to limit)
                 }
                 return {"success": True, "result": result}
             
@@ -633,7 +684,14 @@ class AgentTools:
                 if self.db is None:
                     return {"error": "Database not available", "success": False}
                 limit = parameters.get("limit", 10)
-                trades = await self.db.trades.find({}).sort("timestamp", -1).limit(limit).to_list(limit)
+                symbol = parameters.get("symbol", None)
+                
+                # Build query
+                query = {}
+                if symbol:
+                    query["symbol"] = symbol.upper()
+                
+                trades = await self.db.trades.find(query).sort("timestamp", -1).limit(limit).to_list(limit)
                 # Convert ObjectId to string
                 from bson import ObjectId
                 for trade in trades:
