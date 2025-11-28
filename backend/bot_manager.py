@@ -996,7 +996,8 @@ class TradingBot:
                 trading_mode = self.current_config.get("trading_mode", "SPOT")
                 await self._update_position_from_balance(symbol, trading_mode)
                 
-                base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                # Extract base asset correctly (supports all quote assets)
+                base_asset = BinanceClientWrapper.extract_base_asset(symbol)
                 
                 # Check current position
                 if self.position == "LONG":
@@ -1037,8 +1038,49 @@ class TradingBot:
                     
                     # Final check: ensure we're not trying to sell more than we have
                     if quantity > balance:
+                        # Reduce to available balance
                         quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
                         logger.info(f"Bot {self.bot_id}: Adjusted quantity to available balance: {quantity} {base_asset}")
+                        
+                        # CRITICAL: Re-check MIN_NOTIONAL after reducing quantity
+                        # If quantity was reduced below MIN_NOTIONAL, we cannot execute the trade
+                        adjusted_quantity_check = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                        if adjusted_quantity_check is None:
+                            order_value = quantity * current_price
+                            symbol_info = self.binance_client.get_symbol_info(symbol)
+                            min_notional = symbol_info.get('min_notional', 10.0)
+                            
+                            error_msg = f"⚠️ Cannot execute SELL order for {symbol}. Available balance {balance} {base_asset} results in order value {order_value:.8f} below minimum notional {min_notional:.8f}. Cannot sell position."
+                            
+                            logger.warning(f"Bot {self.bot_id}: {error_msg}")
+                            await self.agent_manager.log_agent_message(
+                                "CypherTrade",
+                                error_msg,
+                                "warning"
+                            )
+                            return
+                        
+                        # Use the re-adjusted quantity if it's valid
+                        if adjusted_quantity_check <= balance:
+                            quantity = adjusted_quantity_check
+                        else:
+                            # Still too much, use balance
+                            quantity = balance
+                            logger.warning(f"Bot {self.bot_id}: Final quantity {quantity} {base_asset} may be below MIN_NOTIONAL, but using available balance")
+                    
+                    # Final validation: ensure quantity is positive and within balance
+                    if quantity <= 0:
+                        logger.warning(f"Bot {self.bot_id}: Invalid quantity {quantity} for SELL order. Balance: {balance} {base_asset}")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ Cannot execute SELL order: Invalid quantity {quantity} {base_asset}. Available balance: {balance} {base_asset}.",
+                            "warning"
+                        )
+                        return
+                    
+                    if quantity > balance:
+                        logger.warning(f"Bot {self.bot_id}: Quantity {quantity} exceeds balance {balance} {base_asset}. Using balance.")
+                        quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
                     
                     # Execute order
                     execution_start_time = datetime.now(timezone.utc)
@@ -1380,16 +1422,24 @@ class TradingBot:
                     return {"success": False, "message": "Either quantity or amount_usdt must be provided"}
                 
                 if side == "BUY":
-                    # Calculate quantity from amount in USDT
-                    balance = self.binance_client.get_account_balance("USDT")
+                    # Calculate quantity from amount in quote asset
+                    quote_asset = BinanceClientWrapper.extract_quote_asset(symbol)
+                    balance = self.binance_client.get_account_balance(quote_asset, trading_mode=self.current_config.get("trading_mode", "SPOT"))
                     amount_to_use = min(amount_usdt, balance)
                     quantity = amount_to_use / current_price
                 elif side == "SELL":
-                    # Use amount_usdt as quantity for SELL (if provided)
+                    # Extract base asset correctly (supports all quote assets)
+                    base_asset = BinanceClientWrapper.extract_base_asset(symbol)
+                    trading_mode = self.current_config.get("trading_mode", "SPOT")
+                    balance = self.binance_client.get_account_balance(base_asset, trading_mode)
+                    
+                    # If amount_usdt is provided, interpret it as quantity (not USDT amount for SELL)
                     # Otherwise, sell all available base asset
-                    base_asset = symbol.replace("USDT", "")
-                    balance = self.binance_client.get_account_balance(base_asset)
-                    quantity = min(amount_usdt, balance) if amount_usdt else balance
+                    if amount_usdt is not None:
+                        # amount_usdt is interpreted as quantity for SELL orders
+                        quantity = min(amount_usdt, balance)
+                    else:
+                        quantity = balance
             
             # Adjust quantity to match Binance LOT_SIZE filter requirements
             quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
@@ -1407,19 +1457,22 @@ class TradingBot:
                 return {"success": False, "message": f"Insufficient balance for {side} order"}
             
             # Validate balance before executing
+            trading_mode = self.current_config.get("trading_mode", "SPOT")
             if side == "BUY":
-                balance = self.binance_client.get_account_balance("USDT")
-                required_usdt = quantity * current_price
-                if balance < required_usdt:
-                    return {"success": False, "message": f"Insufficient USDT balance. Required: {required_usdt:.2f}, Available: {balance:.2f}"}
+                quote_asset = BinanceClientWrapper.extract_quote_asset(symbol)
+                balance = self.binance_client.get_account_balance(quote_asset, trading_mode)
+                required_quote = quantity * current_price
+                if balance < required_quote:
+                    return {"success": False, "message": f"Insufficient {quote_asset} balance. Required: {required_quote:.8f}, Available: {balance:.8f}"}
             elif side == "SELL":
-                base_asset = symbol.replace("USDT", "")
-                balance = self.binance_client.get_account_balance(base_asset)
+                base_asset = BinanceClientWrapper.extract_base_asset(symbol)
+                balance = self.binance_client.get_account_balance(base_asset, trading_mode)
                 if balance < quantity:
-                    return {"success": False, "message": f"Insufficient {base_asset} balance. Required: {quantity}, Available: {balance}"}
+                    return {"success": False, "message": f"Insufficient {base_asset} balance. Required: {quantity:.8f}, Available: {balance:.8f}"}
             
             # Execute order
-            order = self.binance_client.execute_order(symbol, side, quantity)
+            trading_mode = self.current_config.get("trading_mode", "SPOT")
+            order = self.binance_client.execute_order(symbol, side, quantity, "MARKET", trading_mode)
             
             # Save trade to database
             trade = {

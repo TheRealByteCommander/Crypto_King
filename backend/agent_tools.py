@@ -307,13 +307,13 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "execute_order",
-                    "description": "Execute a trading order on Binance. Use this ONLY when explicitly instructed by CypherMind with a clear BUY/SELL signal.",
+                    "description": "Execute a trading order on Binance. Use this ONLY when explicitly instructed by CypherMind with a clear BUY/SELL signal. CRITICAL: For SELL orders, quantity must be the amount of BASE ASSET to sell (e.g., 0.01 BTC), NOT the USDT value. Always validate quantity is positive and greater than 0 before executing.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "symbol": {
                                 "type": "string",
-                                "description": "The trading symbol (e.g., BTCUSDT)"
+                                "description": "The trading symbol (e.g., BTCUSDT, SOLBTC, ETHUSDT)"
                             },
                             "side": {
                                 "type": "string",
@@ -322,13 +322,20 @@ class AgentTools:
                             },
                             "quantity": {
                                 "type": "number",
-                                "description": "The quantity to trade (e.g., 0.01 BTC)"
+                                "description": "The quantity to trade in BASE ASSET (e.g., 0.01 BTC, 10 SOL). For SELL orders, this is the amount of base asset to sell. For BUY orders, this is the amount of base asset to buy. MUST be a positive number greater than 0.",
+                                "minimum": 0.00000001
                             },
                             "order_type": {
                                 "type": "string",
                                 "enum": ["MARKET", "LIMIT"],
                                 "description": "The order type (default: MARKET)",
                                 "default": "MARKET"
+                            },
+                            "trading_mode": {
+                                "type": "string",
+                                "enum": ["SPOT", "MARGIN", "FUTURES"],
+                                "description": "The trading mode (default: SPOT). Uses bot's configured trading mode if not specified.",
+                                "default": "SPOT"
                             }
                         },
                         "required": ["symbol", "side", "quantity"]
@@ -648,9 +655,28 @@ class AgentTools:
                 side = parameters.get("side")
                 quantity = parameters.get("quantity")
                 order_type = parameters.get("order_type", "MARKET")
-                if not all([symbol, side, quantity]):
-                    return {"error": "Missing required parameters: symbol, side, quantity", "success": False}
-                result = self.binance_client.execute_order(symbol, side, quantity, order_type)
+                trading_mode = parameters.get("trading_mode", "SPOT")
+                
+                # Validate required parameters
+                if not symbol or not side:
+                    return {"error": "Missing required parameters: symbol and side are required", "success": False}
+                
+                if quantity is None or quantity <= 0:
+                    return {"error": "Missing or invalid quantity parameter. Quantity must be a positive number.", "success": False}
+                
+                # Validate quantity is a number
+                try:
+                    quantity = float(quantity)
+                    if quantity <= 0:
+                        return {"error": "Quantity must be greater than 0", "success": False}
+                except (ValueError, TypeError):
+                    return {"error": f"Invalid quantity parameter: {quantity}. Must be a number.", "success": False}
+                
+                # Get trading mode from bot if available, otherwise use default
+                if self.bot and hasattr(self.bot, 'current_config'):
+                    trading_mode = self.bot.current_config.get("trading_mode", trading_mode)
+                
+                result = self.binance_client.execute_order(symbol, side, quantity, order_type, trading_mode)
                 return {"success": True, "result": result}
             
             elif tool_name == "get_order_status":

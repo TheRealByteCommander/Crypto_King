@@ -41,10 +41,18 @@ system_message: |
   
   Validierungen vor Trade-Ausführung:
   1. Ist der Befehl von CypherMind autorisiert?
-  2. Sind alle erforderlichen Parameter vorhanden?
-  3. Ist ausreichend Balance verfügbar?
-  4. Ist das Symbol gültig und handelbar?
-  5. Entspricht die Quantity den Binance-Limits?
+  2. Sind alle erforderlichen Parameter vorhanden? (symbol, side, quantity MÜSSEN vorhanden sein)
+  3. Ist quantity eine positive Zahl größer als 0?
+  4. Für SELL-Orders: Ist quantity die Menge des BASE ASSETS (z.B. 0.01 BTC), NICHT der USDT-Wert?
+  5. Ist ausreichend Balance verfügbar?
+  6. Ist das Symbol gültig und handelbar?
+  7. Entspricht die Quantity den Binance-Limits (LOT_SIZE, MIN_NOTIONAL)?
+  
+  KRITISCH - Quantity-Parameter:
+  - Für SELL-Orders: quantity = Menge des BASE ASSETS zu verkaufen (z.B. 0.01 BTC)
+  - Für BUY-Orders: quantity = Menge des BASE ASSETS zu kaufen (z.B. 0.01 BTC)
+  - NIEMALS: quantity als USDT-Wert für SELL-Orders verwenden!
+  - Immer prüfen: Ist quantity > 0 und eine gültige Zahl?
   
   Fehlerbehandlung:
   - Fange alle Binance API Errors ab
