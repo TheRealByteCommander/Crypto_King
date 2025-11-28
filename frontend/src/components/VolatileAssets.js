@@ -10,17 +10,36 @@ const VolatileAssets = () => {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [error, setError] = useState(null);
 
   const fetchVolatileAssets = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await axios.get(`${API}/market/volatile?limit=20`);
+      
+      console.log("Volatile Assets API Response:", response.data); // Debug log
+      
       if (response.data.success) {
-        setAssets(response.data.assets || []);
-        setLastUpdate(new Date());
+        const assetsData = response.data.assets || [];
+        console.log(`Received ${assetsData.length} volatile assets`); // Debug log
+        
+        if (assetsData.length === 0) {
+          setError("Keine volatilen Assets gefunden. Die API hat eine leere Liste zurückgegeben.");
+        } else {
+          setAssets(assetsData);
+          setLastUpdate(new Date());
+        }
+      } else {
+        const errorMsg = response.data.error || "Unbekannter Fehler beim Abrufen der volatilen Assets";
+        setError(errorMsg);
+        console.error("API returned success=false:", response.data);
       }
     } catch (error) {
+      const errorMessage = error.response?.data?.error || error.message || "Fehler beim Abrufen der volatilen Assets";
+      setError(errorMessage);
       console.error("Error fetching volatile assets:", error);
+      setAssets([]);
     } finally {
       setLoading(false);
     }
@@ -99,6 +118,17 @@ const VolatileAssets = () => {
         <p className="text-sm text-slate-400 mb-4">
           Letzte Aktualisierung: {formatBerlinTimeOnly(lastUpdate)}
         </p>
+      )}
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <p className="text-red-400 text-sm">
+            ⚠️ {error}
+          </p>
+          <p className="text-slate-400 text-xs mt-2">
+            Bitte prüfe die Backend-Logs für weitere Details.
+          </p>
+        </div>
       )}
 
       <div className="overflow-x-auto">
