@@ -221,7 +221,7 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "start_autonomous_bot",
-                    "description": "Start an autonomous trading bot with automatic budget calculation. Budget is set to average budget of running bots, but maximum 40% of available capital. CypherMind can start maximum 2 autonomous bots. Each bot will learn from its trades.",
+                    "description": "Start an autonomous trading bot with automatic budget calculation. Budget is set to average budget of running bots, but maximum 40% of available capital. CypherMind can start maximum 6 autonomous bots (KEY-FEATURE). Each bot will learn from its trades. Bots are automatically stopped after 24h if performance is insufficient (< 0% P&L).",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -948,9 +948,12 @@ class AgentTools:
                         bot.current_config.get("started_by") == "CypherMind"
                     ]
                     
-                    if len(cyphermind_bots) >= 2:
+                    # Import MAX_AUTONOMOUS_BOTS from autonomous_manager
+                    from autonomous_manager import MAX_AUTONOMOUS_BOTS
+                    
+                    if len(cyphermind_bots) >= MAX_AUTONOMOUS_BOTS:
                         return {
-                            "error": f"CypherMind has already started {len(cyphermind_bots)} autonomous bots (maximum: 2)",
+                            "error": f"CypherMind has already started {len(cyphermind_bots)} autonomous bots (maximum: {MAX_AUTONOMOUS_BOTS})",
                             "success": False
                         }
                     

@@ -757,7 +757,7 @@ async def get_pattern_insights(symbol: str, strategy: str):
 
 @api_router.get("/market/volatile")
 async def get_volatile_assets(limit: int = 20):
-    """Get the most volatile assets (30-day analysis) for NexusChat dashboard."""
+    """Get the most volatile assets (24h analysis for all USDT pairs) for NexusChat dashboard."""
     try:
         # Create a temporary Binance client if bot is not running
         binance_client = bot.binance_client
@@ -765,27 +765,29 @@ async def get_volatile_assets(limit: int = 20):
             from binance_client import BinanceClientWrapper
             binance_client = BinanceClientWrapper()
         
-        # Get 30-day volatile assets with timeout
+        # Get 24h volatile assets for all USDT pairs
         tickers = []
         try:
-            logger.info("Getting 30-day volatile assets...")
-            # Run 30-day analysis in thread pool with timeout
+            logger.info("Getting 24h volatile assets for all USDT pairs...")
+            # Run 24h analysis in thread pool with timeout
             try:
                 tickers = await asyncio.wait_for(
-                    asyncio.to_thread(binance_client.get_30d_volatile_assets),
-                    timeout=20.0  # 20 seconds timeout
+                    asyncio.to_thread(binance_client.get_24h_volatile_assets_usdt),
+                    timeout=30.0  # 30 seconds timeout (might take longer for all USDT pairs)
                 )
-                logger.info(f"30-day analysis completed: {len(tickers)} assets found")
-                # If no assets found or too few, fallback to 24h
-                if len(tickers) < 5:
-                    logger.warning(f"30-day analysis found only {len(tickers)} assets (<5), using 24h ticker stats as fallback")
-                    tickers = binance_client.get_24h_ticker_stats()
+                logger.info(f"24h analysis completed: {len(tickers)} USDT assets found")
             except asyncio.TimeoutError:
-                logger.warning("30-day analysis timed out, using 24h ticker stats as fallback")
+                logger.warning("24h analysis timed out, using fallback method")
+                # Fallback: Use regular 24h ticker stats (faster but might miss some USDT pairs)
                 tickers = binance_client.get_24h_ticker_stats()
+                # Filter for USDT pairs only
+                tickers = [t for t in tickers if t.get('symbol', '').endswith('USDT')]
             except Exception as analysis_error:
-                logger.warning(f"30-day analysis failed: {analysis_error}, using 24h ticker stats as fallback")
+                logger.warning(f"24h analysis failed: {analysis_error}, using fallback method")
+                # Fallback: Use regular 24h ticker stats
                 tickers = binance_client.get_24h_ticker_stats()
+                # Filter for USDT pairs only
+                tickers = [t for t in tickers if t.get('symbol', '').endswith('USDT')]
         except Exception as e:
             logger.error(f"Failed to get volatile assets: {e}", exc_info=True)
             return {

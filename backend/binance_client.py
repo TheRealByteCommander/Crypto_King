@@ -296,6 +296,70 @@ class BinanceClientWrapper:
             logger.error(f"Error getting 24h ticker stats: {e}")
             raise
     
+    def get_24h_volatile_assets_usdt(self) -> List[Dict[str, Any]]:
+        """Get 24h volatile assets for all USDT trading pairs."""
+        try:
+            logger.info("Getting all USDT trading pairs for 24h volatility analysis...")
+            
+            # Get all tradable symbols and filter for USDT pairs
+            all_symbols = self.get_tradable_symbols()
+            usdt_symbols = [
+                s['symbol'] for s in all_symbols 
+                if s.get('quoteAsset') == 'USDT' and s.get('status') == 'TRADING'
+            ]
+            
+            logger.info(f"Found {len(usdt_symbols)} USDT trading pairs")
+            
+            # Get 24h ticker data for all symbols
+            all_tickers = self.client.get_ticker()
+            
+            # Create a dictionary for quick lookup
+            ticker_dict = {ticker.get('symbol', ''): ticker for ticker in all_tickers}
+            
+            volatile_assets = []
+            
+            # Process all USDT pairs
+            for symbol in usdt_symbols:
+                ticker = ticker_dict.get(symbol)
+                if not ticker:
+                    continue
+                
+                try:
+                    price_change_percent = float(ticker.get('priceChangePercent', 0))
+                    price = float(ticker.get('lastPrice', 0))
+                    high_price = float(ticker.get('highPrice', 0))
+                    low_price = float(ticker.get('lowPrice', 0))
+                    volume = float(ticker.get('volume', 0))
+                    quote_volume = float(ticker.get('quoteVolume', 0))
+                    
+                    # Include all USDT pairs (no minimum threshold, we want to see all)
+                    volatile_assets.append({
+                        'symbol': symbol,
+                        'price': price,
+                        'priceChange': float(ticker.get('priceChange', 0)),
+                        'priceChangePercent': price_change_percent,
+                        'highPrice': high_price,
+                        'lowPrice': low_price,
+                        'volume': volume,
+                        'quoteVolume': quote_volume
+                    })
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"Skipping {symbol} due to invalid data: {e}")
+                    continue
+            
+            # Sort by absolute price change percent (volatility) - highest first
+            volatile_assets.sort(key=lambda x: abs(x['priceChangePercent']), reverse=True)
+            
+            logger.info(f"Retrieved {len(volatile_assets)} USDT pairs with 24h volatility data")
+            return volatile_assets
+        
+        except BinanceAPIException as e:
+            logger.error(f"Binance API error getting 24h volatile USDT assets: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error getting 24h volatile USDT assets: {e}", exc_info=True)
+            raise
+    
     def get_30d_volatile_assets(self) -> List[Dict[str, Any]]:
         """Get most volatile assets based on 30-day historical data."""
         try:
