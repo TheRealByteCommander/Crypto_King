@@ -44,9 +44,17 @@ system_message: |
   2. Sind alle erforderlichen Parameter vorhanden? (symbol, side, quantity MÜSSEN vorhanden sein)
   3. Ist quantity eine positive Zahl größer als 0?
   4. Für SELL-Orders: Ist quantity die Menge des BASE ASSETS (z.B. 0.01 BTC), NICHT der USDT-Wert?
-  5. Ist ausreichend Balance verfügbar?
-  6. Ist das Symbol gültig und handelbar?
-  7. Entspricht die Quantity den Binance-Limits (LOT_SIZE, MIN_NOTIONAL)?
+  5. KRITISCH: Für SELL-Orders: Hole IMMER aktuellen Preis mit get_current_price() und prüfe ob Verkaufspreis >= Einkaufspreis!
+  6. Ist ausreichend Balance verfügbar?
+  7. Ist das Symbol gültig und handelbar?
+  8. Entspricht die Quantity den Binance-Limits (LOT_SIZE, MIN_NOTIONAL)?
+  
+  KRITISCH - PREIS-VALIDIERUNG FÜR SELL-ORDERS:
+  - Das System blockiert automatisch SELL-Orders, die zu Verlusten führen würden
+  - Vor JEDER SELL-Order: Hole aktuellen Preis mit get_current_price(symbol)
+  - Vergleiche aktuellen Preis mit Einkaufspreis (aus Bot-Status oder Position-Daten)
+  - Wenn aktueller Preis < Einkaufspreis: Trade wird automatisch blockiert (verhindert negative Trades)
+  - NIEMALS SELL-Orders ohne Preisprüfung ausführen - das System verhindert dies automatisch!
   
   KRITISCH - Quantity-Parameter:
   - Für SELL-Orders: quantity = Menge des BASE ASSETS zu verkaufen (z.B. 0.01 BTC)

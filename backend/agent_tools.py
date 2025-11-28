@@ -307,7 +307,7 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "execute_order",
-                    "description": "Execute a trading order on Binance. Use this ONLY when explicitly instructed by CypherMind with a clear BUY/SELL signal. CRITICAL: For SELL orders, quantity must be the amount of BASE ASSET to sell (e.g., 0.01 BTC), NOT the USDT value. Always validate quantity is positive and greater than 0 before executing.",
+                    "description": "Execute a trading order on Binance. Use this ONLY when explicitly instructed by CypherMind with a clear BUY/SELL signal. CRITICAL: For SELL orders, quantity must be the amount of BASE ASSET to sell (e.g., 0.01 BTC), NOT the USDT value. Always validate quantity is positive and greater than 0 before executing. REQUIRED: Before executing SELL orders, ALWAYS call get_current_price() first to check current market price vs entry price. SELL orders that would result in losses (current price < entry price) are automatically blocked to prevent negative trades.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -675,6 +675,52 @@ class AgentTools:
                 # Get trading mode from bot if available, otherwise use default
                 if self.bot and hasattr(self.bot, 'current_config'):
                     trading_mode = self.bot.current_config.get("trading_mode", trading_mode)
+                
+                # CRITICAL: Before executing SELL orders, ALWAYS check current price to prevent negative trades
+                if side == "SELL":
+                    try:
+                        # Get current price
+                        current_price = self.binance_client.get_current_price(symbol)
+                        
+                        # Check if we have position tracking data
+                        if self.bot and hasattr(self.bot, 'position_entry_price') and hasattr(self.bot, 'position'):
+                            if self.bot.position == "LONG" and self.bot.position_entry_price > 0:
+                                # Check if selling would result in a loss
+                                if current_price < self.bot.position_entry_price:
+                                    pnl_percent = ((current_price - self.bot.position_entry_price) / self.bot.position_entry_price) * 100
+                                    error_msg = (
+                                        f"⚠️ SELL order BLOCKED: Current price {current_price} is below entry price "
+                                        f"{self.bot.position_entry_price} ({pnl_percent:.2f}% loss). "
+                                        f"This would result in a negative trade. Please check current market prices "
+                                        f"using get_current_price before executing SELL orders."
+                                    )
+                                    logger.warning(f"Agent execute_order: {error_msg}")
+                                    return {
+                                        "error": error_msg,
+                                        "success": False,
+                                        "current_price": current_price,
+                                        "entry_price": self.bot.position_entry_price,
+                                        "potential_loss_percent": pnl_percent
+                                    }
+                                else:
+                                    # Selling at profit or break-even is OK
+                                    pnl_percent = ((current_price - self.bot.position_entry_price) / self.bot.position_entry_price) * 100
+                                    logger.info(
+                                        f"Agent execute_order: SELL validated - Current price {current_price} >= "
+                                        f"Entry price {self.bot.position_entry_price} ({pnl_percent:.2f}% profit/loss)"
+                                    )
+                        else:
+                            # No position tracking - log warning but allow trade (agents might be managing multiple bots)
+                            logger.warning(
+                                f"Agent execute_order: SELL order for {symbol} - No position tracking data available. "
+                                f"Current price: {current_price}. Proceeding with caution."
+                            )
+                    except Exception as e:
+                        logger.error(f"Error validating current price before SELL order: {e}")
+                        return {
+                            "error": f"Failed to validate current price before SELL order: {str(e)}. Cannot execute SELL without price validation.",
+                            "success": False
+                        }
                 
                 result = self.binance_client.execute_order(symbol, side, quantity, order_type, trading_mode)
                 return {"success": True, "result": result}

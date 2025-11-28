@@ -1012,6 +1012,27 @@ class TradingBot:
                     # Get current price
                     current_price = self.binance_client.get_current_price(symbol)
                     
+                    # CRITICAL: Validate that we're not selling at a loss (unless it's a forced close due to stop loss)
+                    # Check if current price is below entry price (we would make a loss)
+                    if current_price < self.position_entry_price:
+                        # Calculate potential loss
+                        pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                        
+                        # Only allow selling at a loss if we're forced to (stop loss already checked earlier)
+                        # This prevents accidental negative trades due to outdated price data
+                        logger.warning(
+                            f"Bot {self.bot_id}: ⚠️ SELL signal would result in LOSS: "
+                            f"Current price {current_price} < Entry price {self.position_entry_price} "
+                            f"({pnl_percent:.2f}% loss). Skipping SELL to prevent negative trade."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ SELL signal BLOCKED: Current price {current_price} is below entry price {self.position_entry_price} "
+                            f"({pnl_percent:.2f}% loss). Would result in negative trade. Skipping.",
+                            "warning"
+                        )
+                        return
+                    
                     # Adjust quantity to match Binance LOT_SIZE filter requirements
                     quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
                     
