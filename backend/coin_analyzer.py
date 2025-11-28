@@ -270,9 +270,26 @@ class CoinAnalyzer:
                 (exclude_symbols is None or s.get("symbol", "") not in exclude_symbols)
             ]
             
-            # Begrenze auf Top 50 nach Volumen (um Zeit zu sparen)
-            # Für echte Implementierung könnte man hier nach 24h-Volumen filtern
-            symbols_to_analyze = usdt_symbols[:50]
+            # Sortiere nach 24h-Volumen (wenn verfügbar) für bessere Ergebnisse
+            # Ansonsten: Mehr Coins analysieren (Top 100 statt 50)
+            try:
+                # Versuche 24h Ticker-Daten zu holen für Volumen-Sortierung
+                tickers = self.binance_client.client.get_ticker()
+                ticker_dict = {t.get("symbol", ""): float(t.get("quoteVolume", 0)) for t in tickers}
+                
+                # Sortiere USDT-Symbole nach Volumen (höchste zuerst)
+                usdt_symbols_sorted = sorted(
+                    usdt_symbols,
+                    key=lambda s: ticker_dict.get(s, 0),
+                    reverse=True
+                )
+                # Analysiere Top 100 nach Volumen (statt nur 50)
+                symbols_to_analyze = usdt_symbols_sorted[:100]
+                logger.info(f"Sorted {len(usdt_symbols)} USDT pairs by 24h volume, analyzing top 100")
+            except Exception as e:
+                logger.warning(f"Could not sort by volume, using first 100 symbols: {e}")
+                # Fallback: Erste 100 (mehr als vorher)
+                symbols_to_analyze = usdt_symbols[:100]
             
             logger.info(f"Analyzing {len(symbols_to_analyze)} coins for optimal trading opportunities...")
             

@@ -186,12 +186,13 @@ class AutonomousManager:
                     await asyncio.sleep(AUTONOMOUS_ANALYSIS_INTERVAL_SECONDS)
                     continue
                 
-                logger.info("Starting autonomous coin analysis...")
+                logger.info(f"Starting autonomous coin analysis... (Autonomous bots: {len(autonomous_bots)}/{MAX_AUTONOMOUS_BOTS})")
                 
                 # Aktiviere CypherMind für autonome Analyse
                 await self._activate_cyphermind_for_analysis()
                 
                 self.last_analysis = datetime.now(timezone.utc)
+                logger.info(f"Autonomous analysis cycle completed. Next analysis in {AUTONOMOUS_ANALYSIS_INTERVAL_SECONDS/60:.0f} minutes.")
                 
             except Exception as e:
                 logger.error(f"Error in autonomous analysis loop: {e}", exc_info=True)
@@ -234,14 +235,22 @@ class AutonomousManager:
             user_proxy = self.agent_manager.get_agent("UserProxy")
             
             # Sende Nachricht und erwarte Antwort (CypherMind soll Tools aufrufen)
-            user_proxy.send(
-                message=context_message,
-                recipient=cyphermind,
-                request_reply=True,
-                max_turns=5  # Erlaube mehrere Tool-Aufrufe
-            )
-            
-            logger.info("CypherMind activated for autonomous analysis")
+            try:
+                user_proxy.send(
+                    message=context_message,
+                    recipient=cyphermind,
+                    request_reply=True,
+                    max_turns=5  # Erlaube mehrere Tool-Aufrufe
+                )
+                logger.info(f"CypherMind activated for autonomous analysis (can start {MAX_AUTONOMOUS_BOTS - len(autonomous_bots)} more bots)")
+            except Exception as send_error:
+                logger.error(f"Error sending message to CypherMind: {send_error}", exc_info=True)
+                # Logge auch in Agent-Logs
+                await self.agent_manager.log_agent_message(
+                    "AutonomousManager",
+                    f"FEHLER: Konnte CypherMind nicht aktivieren: {send_error}",
+                    "error"
+                )
             
         except Exception as e:
             logger.error(f"Error activating CypherMind for analysis: {e}", exc_info=True)

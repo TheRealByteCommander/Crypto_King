@@ -193,10 +193,10 @@ class AgentTools:
                         "properties": {
                             "max_coins": {
                                 "type": "integer",
-                                "description": "Maximum number of coins to analyze and return (default: 10, max: 20)",
-                                "default": 10,
+                                "description": "Maximum number of coins to analyze and return (default: 20, max: 50)",
+                                "default": 20,
                                 "minimum": 1,
-                                "maximum": 20
+                                "maximum": 50
                             },
                             "min_score": {
                                 "type": "number",
@@ -890,13 +890,13 @@ class AgentTools:
                     if self.binance_client is None:
                         return {"error": "Binance client not available", "success": False}
                     
-                    max_coins = parameters.get("max_coins", 10)
+                    max_coins = parameters.get("max_coins", 20)
                     min_score = parameters.get("min_score", 0.2)
                     exclude_symbols = parameters.get("exclude_symbols", None)
                     
                     # Validate parameters
-                    if max_coins < 1 or max_coins > 20:
-                        max_coins = 10
+                    if max_coins < 1 or max_coins > 50:  # Erhöht von 20 auf 50
+                        max_coins = 20
                     if min_score < 0.0 or min_score > 1.0:
                         min_score = 0.2
                     
@@ -910,10 +910,22 @@ class AgentTools:
                         exclude_symbols=exclude_symbols
                     )
                     
+                    # Fallback: Wenn keine Coins mit min_score gefunden, versuche mit niedrigerer Schwelle
+                    if len(results) == 0 and min_score >= 0.3:
+                        logger.info(f"No coins found with min_score={min_score}, trying with lower threshold (0.2)")
+                        results = await analyzer.find_optimal_coins(
+                            min_score=0.2,
+                            max_coins=max_coins,
+                            exclude_symbols=exclude_symbols
+                        )
+                        if results:
+                            logger.info(f"Found {len(results)} coins with lower threshold (0.2)")
+                    
                     return {
                         "success": True,
                         "count": len(results),
-                        "coins": results
+                        "coins": results,
+                        "min_score_used": min_score if len(results) > 0 or min_score < 0.3 else 0.2
                     }
                 except Exception as e:
                     logger.error(f"Error analyzing optimal coins: {e}", exc_info=True)
