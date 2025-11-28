@@ -759,8 +759,17 @@ async def get_pattern_insights(symbol: str, strategy: str):
 async def get_volatile_assets(limit: int = 20):
     """Get the most volatile assets (24h analysis for all USDT pairs) for NexusChat dashboard."""
     try:
-        # Create a temporary Binance client if bot is not running
-        binance_client = bot.binance_client
+        # Get binance_client from a running bot, or create a new one
+        binance_client = None
+        
+        # Try to get binance_client from a running bot
+        all_bots = bot_manager.get_all_bots()
+        for bot in all_bots.values():
+            if bot.binance_client:
+                binance_client = bot.binance_client
+                break
+        
+        # If no bot has a binance_client, create a new one
         if binance_client is None:
             from binance_client import BinanceClientWrapper
             binance_client = BinanceClientWrapper()
