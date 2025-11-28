@@ -838,10 +838,9 @@ class TradingBot:
                 else:
                     pnl_percent = 0
                 
-                # If position is at stop loss or take profit, close it first
-                # Check stop loss only here - trailing stop is handled in _check_stop_loss_and_take_profit
+                # If position is at stop loss, close it first (trailing stop is handled in _check_stop_loss_and_take_profit)
                 if pnl_percent <= STOP_LOSS_PERCENT:
-                    logger.warning(f"Bot {self.bot_id}: Position at {pnl_percent:.2f}% P&L (Stop-Loss: {STOP_LOSS_PERCENT}%, Take-Profit: {TAKE_PROFIT_MIN_PERCENT}-{TAKE_PROFIT_MAX_PERCENT}%). Closing position before executing new trade.")
+                    logger.warning(f"Bot {self.bot_id}: Position at {pnl_percent:.2f}% P&L (Stop-Loss: {STOP_LOSS_PERCENT}%). Closing position before executing new trade.")
                     await self._check_stop_loss_and_take_profit(symbol, analysis)
                     # After closing position, check if we should still execute the new trade
                     # For BUY: continue (opening new position is fine)
