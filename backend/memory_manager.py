@@ -39,6 +39,11 @@ class AgentMemory:
                 "session_id": metadata.get("session_id") if metadata else None
             }
             
+            # Special handling for trading_knowledge type
+            if memory_type == "trading_knowledge":
+                # Store with longer retention
+                memory_entry["retention_days"] = 90  # Keep trading knowledge longer
+            
             # Store in database
             result = await self.collection.insert_one(memory_entry)
             

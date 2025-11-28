@@ -7,6 +7,7 @@ import uuid
 from binance_client import BinanceClientWrapper
 from strategies import get_strategy
 from config import settings
+from market_phase_analyzer import MarketPhaseAnalyzer
 from constants import (
     BOT_LOOP_INTERVAL_SECONDS,
     BOT_ERROR_RETRY_DELAY_SECONDS,
@@ -49,6 +50,9 @@ class TradingBot:
         self.position_size = 0.0  # Quantity of base asset in position
         self.position_entry_price = 0.0  # Entry price for current position
         self.position_high_price = 0.0  # Highest price since entry (for trailing stop take profit)
+        # Market phase analysis
+        self.market_phase_analyzer = MarketPhaseAnalyzer()
+        self.current_market_phase = None  # "BULLISH", "BEARISH", "SIDEWAYS"
     
     async def start(self, strategy: str, symbol: str, amount: float, timeframe: str = "5m", trading_mode: str = "SPOT") -> Dict[str, Any]:
         """Start the trading bot with specified parameters."""
@@ -339,9 +343,26 @@ class TradingBot:
                 logger.info(f"Bot {self.bot_id}: Fetching market data (timeframe: {timeframe})...")
                 market_data = self.binance_client.get_market_data(symbol, interval=timeframe, limit=100)
                 
-                # Step 2: Analyze with strategy
+                # Step 2: Analyze market phase
+                market_phase_analysis = self.market_phase_analyzer.analyze_phase(market_data, lookback_periods=20)
+                self.current_market_phase = market_phase_analysis.get("phase")
+                
+                # Log market phase to agents
+                phase_desc = market_phase_analysis.get("description", "")
+                phase_confidence = market_phase_analysis.get("confidence", 0.0)
+                await self.agent_manager.log_agent_message(
+                    "CypherMind",
+                    f"📊 Market Phase Analysis: {phase_desc} (Confidence: {phase_confidence:.2f})",
+                    "analysis"
+                )
+                
+                # Step 3: Analyze with strategy
                 logger.info(f"Bot {self.bot_id}: Analyzing market data...")
                 analysis = strategy_obj.analyze(market_data)
+                
+                # Add market phase info to analysis
+                analysis["market_phase"] = self.current_market_phase
+                analysis["market_phase_analysis"] = market_phase_analysis
                 
                 # Get current price for logging
                 try:
@@ -354,7 +375,7 @@ class TradingBot:
                     if "current_price" in analysis:
                         price_info = f" | Current Price: {analysis['current_price']} USDT"
                 
-                # Step 3: Log analysis to CypherMind
+                # Step 4: Log analysis to CypherMind
                 signal = analysis.get("signal", "HOLD")
                 confidence = analysis.get("confidence", 0.0)
                 reason = analysis.get("reason", "No specific reason")
@@ -363,14 +384,20 @@ class TradingBot:
                 decision_price = current_price if 'current_price' in locals() else analysis.get("indicators", {}).get("current_price", 0.0)
                 decision_timestamp = datetime.now(timezone.utc)
                 
-                log_message = f"Market Analysis for {symbol}: {signal} signal (Confidence: {confidence:.2f}){price_info}\nReason: {reason}"
+                # Include market phase in log message
+                market_phase_info = ""
+                if self.current_market_phase:
+                    phase_confidence = market_phase_analysis.get("confidence", 0.0)
+                    market_phase_info = f"\nMarket Phase: {self.current_market_phase} (Confidence: {phase_confidence:.2f})"
+                
+                log_message = f"Market Analysis for {symbol}: {signal} signal (Confidence: {confidence:.2f}){price_info}{market_phase_info}\nReason: {reason}"
                 await self.agent_manager.log_agent_message("CypherMind", log_message, "analysis")
                 
-                # Step 4: Check stop loss and take profit for existing positions BEFORE executing new trades
+                # Step 5: Check stop loss and take profit for existing positions BEFORE executing new trades
                 if self.position is not None and self.position_entry_price > 0:
                     await self._check_stop_loss_and_take_profit(symbol, analysis)
                 
-                # Step 5: Execute trade if signal is strong enough
+                # Step 6: Execute trade if signal is strong enough
                 if signal in ["BUY", "SELL"] and confidence >= 0.6:
                     logger.info(f"Bot {self.bot_id}: Strong {signal} signal detected (confidence: {confidence:.2f}), executing trade...")
                     # Pass decision price and timestamp to track delay
@@ -378,7 +405,7 @@ class TradingBot:
                 else:
                     logger.info(f"Bot {self.bot_id}: Signal: {signal}, Confidence: {confidence:.2f} - No trade executed (confidence too low or HOLD signal)")
                 
-                # Step 6: Wait before next iteration
+                # Step 7: Wait before next iteration
                 await asyncio.sleep(BOT_LOOP_INTERVAL_SECONDS)
                 
             except asyncio.CancelledError:

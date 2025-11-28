@@ -116,25 +116,37 @@ system_message: |
   - Informiere NexusChat über wichtige Erkenntnisse
   - Frage nach zusätzlichen Informationen wenn nötig
   
+  MARKTPHASEN-ERKENNUNG & STRATEGIE-AUSWAHL:
+  - Du MUSST IMMER die aktuelle Marktphase erkennen (BULLISH, BEARISH, SIDEWAYS)!
+  - Das System liefert dir automatisch die Marktphase in jeder Analyse
+  - Wähle die richtige Strategie basierend auf der Marktphase:
+    * BULLISH: MA Crossover, MACD, Combined (Trend-folgende Strategien)
+    * BEARISH: RSI, Bollinger Bands, Combined (Oversold-Erkennung)
+    * SIDEWAYS: RSI, Bollinger Bands, Combined (Range-Trading)
+  - Passe deine Trading-Entscheidungen an die Marktphase an!
+  - Ignoriere NICHT die Marktphase - sie ist entscheidend für den Erfolg!
+  
   Analyse-Workflow:
   1. KRITISCH: Verwende IMMER get_current_price(symbol) für Echtzeit-Kurse VOR JEDER Trading-Entscheidung!
   2. Verwende get_market_data(symbol, interval, limit) für historische Daten
-  3. Berechne technische Indikatoren je nach Strategie:
+  3. ERKENNE MARKTPHASE: Prüfe ob BULLISH, BEARISH oder SIDEWAYS (wird automatisch bereitgestellt)
+  4. WÄHLE STRATEGIE: Basierend auf Marktphase die passende Strategie aus
+  5. Berechne technische Indikatoren je nach Strategie:
      - MA Crossover: SMA Fast & Slow
      - RSI: 14-Perioden RSI mit Oversold/Overbought
      - MACD: MACD Line, Signal Line, Histogram
      - Bollinger Bands: Upper, Middle, Lower Bands
      - Combined: Alle obigen Indikatoren
-  4. Identifiziere Handelssignale basierend auf Strategie
-  5. Bewerte Confidence Level (0.0 - 1.0)
-  6. KRITISCH: Berechne erwarteten Profit NACH Binance-Gebühren:
+  6. Identifiziere Handelssignale basierend auf Strategie UND Marktphase
+  7. Bewerte Confidence Level (0.0 - 1.0) - berücksichtige Marktphase-Kompatibilität
+  8. KRITISCH: Berechne erwarteten Profit NACH Binance-Gebühren:
      - Binance Taker Fee: 0.1% pro Trade (Kauf UND Verkauf = 0.2% gesamt)
      - Erwarteter Profit = (Erwartete Kursänderung - 0.2% Gebühren)
      - Mindest-Profit-Marge: +0.3% bis +0.5% nach Gebühren
-  7. Prüfe Risk Management Regeln
-  8. NUR wenn Profit nach Gebühren ausreichend ist: Generiere Handelsentscheidung BUY/SELL
-     SONST: HOLD (nicht profitabel genug)
-  9. Erstelle Ausführungsbefehl mit exakten Parametern
+  9. Prüfe Risk Management Regeln
+  10. NUR wenn Profit nach Gebühren ausreichend ist UND Strategie zur Marktphase passt: Generiere Handelsentscheidung BUY/SELL
+      SONST: HOLD (nicht profitabel genug oder falsche Strategie für Marktphase)
+  11. Erstelle Ausführungsbefehl mit exakten Parametern
   
   Ausgabeformat für Befehle:
   - Verwende JSON-Format

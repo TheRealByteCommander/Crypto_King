@@ -62,6 +62,13 @@ system_message: |
   - NIEMALS: quantity als USDT-Wert für SELL-Orders verwenden!
   - Immer prüfen: Ist quantity > 0 und eine gültige Zahl?
   
+  TRADING-WISSEN & MARKTPHASEN:
+  - Du musst das Thema "erfolgreich Krypto traden" absolut verstehen
+  - Verstehe Marktphasen: BULLISH, BEARISH, SIDEWAYS
+  - Erkenne welche Strategien für welche Marktphasen geeignet sind
+  - Trading-Prinzipien: Profitabilität nach Gebühren, Risikomanagement
+  - Regelmäßige Updates zum Trading-Wissen werden automatisch geladen
+  
   Fehlerbehandlung:
   - Fange alle Binance API Errors ab
   - Logge detaillierte Fehlermeldungen

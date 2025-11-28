@@ -8,6 +8,7 @@ import yaml
 from pathlib import Path
 from memory_manager import MemoryManager
 from agent_tools import AgentTools
+from trading_knowledge_loader import TradingKnowledgeLoader
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ class AgentManager:
         self.current_position = None
         self.capital = settings.default_amount
         self.memory_manager = MemoryManager(db)
+        # Initialize trading knowledge loader
+        self.trading_knowledge_loader = TradingKnowledgeLoader(db)
+        self.trading_knowledge = None  # Will be loaded on first access
         # Initialize agent tools
         self.agent_tools = AgentTools(bot=bot, binance_client=binance_client, db=db)
         self.load_agent_configs()
@@ -104,6 +108,93 @@ class AgentManager:
         except Exception as e:
             logger.warning(f"Could not load memory for {agent_name}: {e}")
             return base_message
+    
+    async def _enrich_system_message_with_trading_knowledge(self, agent_name: str, base_message: str) -> str:
+        """Enrich agent system message with trading knowledge."""
+        try:
+            # Load trading knowledge if not already loaded
+            if self.trading_knowledge is None:
+                self.trading_knowledge = await self.trading_knowledge_loader.load_trading_knowledge()
+            
+            # Get relevant knowledge for this agent
+            knowledge_text = self._format_trading_knowledge_for_agent(agent_name, self.trading_knowledge)
+            
+            return base_message + "\n\n" + knowledge_text
+        except Exception as e:
+            logger.warning(f"Could not load trading knowledge for {agent_name}: {e}")
+            return base_message
+    
+    def _format_trading_knowledge_for_agent(self, agent_name: str, knowledge: Dict[str, Any]) -> str:
+        """Formatiert Trading-Wissen für einen spezifischen Agent."""
+        if not knowledge:
+            return ""
+        
+        knowledge_section = "\n=== TRADING-WISSEN & MARKTPHASEN ===\n\n"
+        
+        # Market Phases Knowledge
+        market_phases = knowledge.get("market_phases", {})
+        knowledge_section += "MARKTPHASEN & TRADING-STRATEGIEN:\n"
+        knowledge_section += "Du musst IMMER die aktuelle Marktphase erkennen (BULLISH, BEARISH, SIDEWAYS) und die richtige Strategie wählen!\n\n"
+        
+        for phase, info in market_phases.items():
+            knowledge_section += f"📊 {phase}:\n"
+            knowledge_section += f"  Charakteristika: {', '.join(info.get('characteristics', []))}\n"
+            knowledge_section += f"  Trading-Ansatz: {', '.join(info.get('trading_approach', []))}\n\n"
+        
+        # Strategy Mapping
+        strategy_mapping = knowledge.get("strategy_mapping", {})
+        knowledge_section += "STRATEGIE-AUSWAHL BASIEREND AUF MARKTPHASE:\n"
+        for phase, mapping in strategy_mapping.items():
+            strategies = mapping.get("best_strategies", [])
+            knowledge_section += f"  {phase}: {', '.join(strategies)}\n"
+            knowledge_section += f"    → {mapping.get('description', '')}\n"
+            for rec in mapping.get("recommendations", []):
+                knowledge_section += f"    • {rec}\n"
+            knowledge_section += "\n"
+        
+        # Trading Basics (for all agents)
+        trading_basics = knowledge.get("trading_basics", {})
+        if trading_basics:
+            knowledge_section += "GRUNDLEGENDE TRADING-PRINZIPIEN:\n"
+            for principle in trading_basics.get("principles", []):
+                knowledge_section += f"  ✓ {principle}\n"
+            knowledge_section += "\n"
+        
+        # Agent-specific knowledge
+        if agent_name.lower() == "cyphermind":
+            indicator_guidelines = knowledge.get("indicator_guidelines", {})
+            knowledge_section += "INDIKATOR-RICHTLINIEN:\n"
+            for indicator, guidelines in indicator_guidelines.items():
+                knowledge_section += f"  {indicator.upper()}: {guidelines.get('description', '')}\n"
+                knowledge_section += f"    Best für: {', '.join(guidelines.get('best_for', []))}\n"
+                knowledge_section += f"    Verwendung: {guidelines.get('usage', '')}\n\n"
+        
+        knowledge_section += "=== ENDE TRADING-WISSEN ===\n"
+        return knowledge_section
+    
+    async def update_trading_knowledge(self, force_refresh: bool = False):
+        """Lädt und aktualisiert Trading-Wissen für alle Agents."""
+        try:
+            logger.info("Updating trading knowledge for all agents...")
+            self.trading_knowledge = await self.trading_knowledge_loader.load_trading_knowledge(force_refresh=force_refresh)
+            
+            # Inject into all agents by updating the system_message attribute
+            for agent_name in ["nexuschat", "cyphermind", "cyphertrade"]:
+                if agent_name in self.agents:
+                    config = self.agent_configs.get(agent_name, {})
+                    base_message = config.get("system_message", "")
+                    enriched_message = await self._enrich_system_message_with_trading_knowledge(agent_name, base_message)
+                    # Update system message - Autogen agents store it in _system_message
+                    if hasattr(self.agents[agent_name], '_system_message'):
+                        self.agents[agent_name]._system_message = enriched_message
+                    elif hasattr(self.agents[agent_name], 'system_message'):
+                        self.agents[agent_name].system_message = enriched_message
+                    logger.info(f"Updated trading knowledge for {agent_name}")
+            
+            logger.info("Trading knowledge updated for all agents")
+            
+        except Exception as e:
+            logger.error(f"Error updating trading knowledge: {e}", exc_info=True)
     
     def initialize_agents(self):
         """Initialize all three specialized agents with configs from YAML files."""

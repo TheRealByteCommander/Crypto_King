@@ -755,6 +755,54 @@ async def get_pattern_insights(symbol: str, strategy: str):
         logger.error(f"Error getting pattern insights: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/trading-knowledge/update")
+async def update_trading_knowledge_endpoint(force_refresh: bool = False):
+    """Manually update trading knowledge for all agents."""
+    try:
+        logger.info(f"Manual trading knowledge update requested (force_refresh={force_refresh})")
+        await agent_manager.update_trading_knowledge(force_refresh=force_refresh)
+        
+        # Store in memory
+        if agent_manager.trading_knowledge:
+            for agent_name in ["NexusChat", "CypherMind", "CypherTrade"]:
+                memory = agent_manager.memory_manager.get_agent_memory(agent_name)
+                await memory.store_memory(
+                    memory_type="trading_knowledge",
+                    content=agent_manager.trading_knowledge,
+                    metadata={"source": "manual_update", "force_refresh": force_refresh}
+                )
+        
+        return {
+            "success": True,
+            "message": "Trading knowledge updated successfully",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error updating trading knowledge: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/trading-knowledge/status")
+async def get_trading_knowledge_status():
+    """Get status of trading knowledge (when it was last loaded, etc.)."""
+    try:
+        if agent_manager.trading_knowledge:
+            loaded_at = agent_manager.trading_knowledge.get("loaded_at", "unknown")
+            return {
+                "success": True,
+                "loaded": True,
+                "loaded_at": loaded_at,
+                "fallback": agent_manager.trading_knowledge.get("fallback", False)
+            }
+        else:
+            return {
+                "success": True,
+                "loaded": False,
+                "loaded_at": None
+            }
+    except Exception as e:
+        logger.error(f"Error getting trading knowledge status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.get("/market/volatile")
 async def get_volatile_assets(limit: int = 20):
     """Get the most volatile assets (24h analysis for all USDT pairs) for NexusChat dashboard."""
@@ -933,6 +981,52 @@ async def startup_event():
         
     except Exception as e:
         logger.warning(f"Could not start Autonomous Manager: {e}. Will retry when bot starts.")
+    
+    # Load trading knowledge for all agents
+    try:
+        logger.info("Loading trading knowledge for all agents...")
+        await agent_manager.update_trading_knowledge(force_refresh=False)
+        logger.info("Trading knowledge loaded successfully")
+        
+        # Store trading knowledge in memory for all agents
+        if agent_manager.trading_knowledge:
+            for agent_name in ["NexusChat", "CypherMind", "CypherTrade"]:
+                memory = agent_manager.memory_manager.get_agent_memory(agent_name)
+                await memory.store_memory(
+                    memory_type="trading_knowledge",
+                    content=agent_manager.trading_knowledge,
+                    metadata={"source": "startup", "auto_loaded": True}
+                )
+            logger.info("Trading knowledge stored in agent memories")
+        
+    except Exception as e:
+        logger.warning(f"Could not load trading knowledge: {e}. Will continue without it.")
+    
+    # Start background task for periodic trading knowledge updates (every 24 hours)
+    async def periodic_trading_knowledge_update():
+        """Periodic task to update trading knowledge every 24 hours."""
+        while True:
+            try:
+                await asyncio.sleep(86400)  # 24 hours in seconds
+                logger.info("Starting periodic trading knowledge update...")
+                await agent_manager.update_trading_knowledge(force_refresh=True)
+                
+                # Update memory
+                if agent_manager.trading_knowledge:
+                    for agent_name in ["NexusChat", "CypherMind", "CypherTrade"]:
+                        memory = agent_manager.memory_manager.get_agent_memory(agent_name)
+                        await memory.store_memory(
+                            memory_type="trading_knowledge",
+                            content=agent_manager.trading_knowledge,
+                            metadata={"source": "periodic_update", "auto_loaded": True}
+                        )
+                logger.info("Periodic trading knowledge update completed")
+            except Exception as e:
+                logger.error(f"Error in periodic trading knowledge update: {e}")
+    
+    # Start the background task
+    asyncio.create_task(periodic_trading_knowledge_update())
+    logger.info("Periodic trading knowledge update task started (updates every 24 hours)")
     
     logger.info("Project CypherTrade started successfully")
 
