@@ -643,7 +643,8 @@ class TradingBot:
                 # Check if we should trigger trailing stop:
                 # 1. Current price must be below trailing trigger (3% drop from high)
                 # 2. We must be at least 2% in profit (pnl_percent >= TAKE_PROFIT_MIN_PERCENT)
-                if current_price <= trailing_trigger_price and pnl_percent >= TAKE_PROFIT_MIN_PERCENT:
+                # 3. CRITICAL: Current P&L must still be positive (not negative) - prevent selling at loss
+                if current_price <= trailing_trigger_price and pnl_percent >= TAKE_PROFIT_MIN_PERCENT and pnl_percent > 0:
                     logger.info(
                         f"Bot {self.bot_id}: TRAILING STOP TAKE PROFIT triggered! "
                         f"Position: {self.position}, Entry: {self.position_entry_price:.8f}, "
@@ -659,19 +660,55 @@ class TradingBot:
                 
                 # Force close position
                 if self.position == "LONG":
+                    # Double-check: Re-fetch current price right before execution to ensure we're still in profit
+                    execution_price_check = self.binance_client.get_current_price(symbol)
+                    execution_pnl_percent_check = ((execution_price_check - self.position_entry_price) / self.position_entry_price) * 100
+                    
+                    # CRITICAL: Only execute if we're still in profit at execution time
+                    if execution_pnl_percent_check <= 0:
+                        logger.warning(
+                            f"Bot {self.bot_id}: TAKE PROFIT abortiert! Preis ist weiter gefallen. "
+                            f"Entry: {self.position_entry_price:.8f}, Execution Price: {execution_price_check:.8f}, "
+                            f"P&L: {execution_pnl_percent_check:.2f}%. Position bleibt offen."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ TAKE PROFIT abgebrochen: Preis weiter gefallen. P&L wäre {execution_pnl_percent_check:.2f}% gewesen.",
+                            "warning"
+                        )
+                        return
+                    
                     # Execute SELL to close LONG
                     base_asset = BinanceClientWrapper.extract_base_asset(symbol)
                     balance = self.binance_client.get_account_balance(base_asset, trading_mode)
                     if balance > 0:
                         quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
-                        adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
+                        adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, execution_price_check)
                         if adjusted_quantity:
                             quantity = adjusted_quantity
                             order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
                             
-                            # Calculate final P&L
-                            pnl = (current_price - self.position_entry_price) * quantity
-                            pnl_percent_final = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                            # Get actual execution price from order
+                            execution_price = execution_price_check  # Fallback
+                            if order.get("fills") and len(order["fills"]) > 0:
+                                # Calculate weighted average execution price
+                                total_qty = 0
+                                total_value = 0
+                                for fill in order["fills"]:
+                                    fill_qty = float(fill.get("qty", 0))
+                                    fill_price = float(fill.get("price", execution_price_check))
+                                    total_qty += fill_qty
+                                    total_value += fill_qty * fill_price
+                                if total_qty > 0:
+                                    execution_price = total_value / total_qty
+                            elif order.get("price"):
+                                execution_price = float(order.get("price"))
+                            elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
+                                execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                            
+                            # Calculate final P&L using actual execution price
+                            pnl = (execution_price - self.position_entry_price) * quantity
+                            pnl_percent_final = ((execution_price - self.position_entry_price) / self.position_entry_price) * 100
                             
                             # Save trade
                             trade = {
@@ -683,7 +720,8 @@ class TradingBot:
                                 "status": order.get("status", ""),
                                 "executed_qty": float(order.get("executedQty", 0)),
                                 "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                                "entry_price": current_price,
+                                "entry_price": execution_price,
+                                "exit_price": execution_price,
                                 "strategy": self.current_config["strategy"],
                                 "trading_mode": trading_mode,
                                 "confidence": analysis.get("confidence", 0.0),
@@ -698,7 +736,7 @@ class TradingBot:
                             
                             # Learn from closed position
                             if pnl is not None:
-                                await self._learn_from_closed_position(trade, pnl, self.position_entry_price, current_price)
+                                await self._learn_from_closed_position(trade, pnl, self.position_entry_price, execution_price)
                             
                             # Reset position
                             self.position = None
@@ -707,10 +745,10 @@ class TradingBot:
                             self.position_entry_price = 0.0
                             self.position_high_price = 0.0
                             
-                            logger.info(f"Bot {self.bot_id}: TRAILING STOP TAKE PROFIT executed - SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
+                            logger.info(f"Bot {self.bot_id}: TRAILING STOP TAKE PROFIT executed - SELL {quantity} {symbol} at {execution_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
                             await self.agent_manager.log_agent_message(
                                 "CypherTrade",
-                                f"TAKE PROFIT executed: SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)",
+                                f"TAKE PROFIT executed: SELL {quantity} {symbol} at {execution_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)",
                                 "trade"
                             )
                 elif self.position == "SHORT":
