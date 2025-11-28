@@ -14,7 +14,7 @@ from constants import (
     QUANTITY_DECIMAL_PLACES,
     STOP_LOSS_PERCENT,
     TAKE_PROFIT_MIN_PERCENT,
-    TAKE_PROFIT_MAX_PERCENT
+    TAKE_PROFIT_TRAILING_PERCENT
 )
 import json
 
@@ -48,6 +48,7 @@ class TradingBot:
         self.position = None  # "LONG", "SHORT", or None - tracks current position
         self.position_size = 0.0  # Quantity of base asset in position
         self.position_entry_price = 0.0  # Entry price for current position
+        self.position_high_price = 0.0  # Highest price since entry (for trailing stop take profit)
     
     async def start(self, strategy: str, symbol: str, amount: float, timeframe: str = "5m", trading_mode: str = "SPOT") -> Dict[str, Any]:
         """Start the trading bot with specified parameters."""
@@ -416,6 +417,7 @@ class TradingBot:
                     self.position = None
                     self.position_size = 0.0
                     self.position_entry_price = 0.0
+                    self.position_high_price = 0.0
             
             elif trading_mode_upper == "MARGIN":
                 # Check margin position
@@ -434,6 +436,7 @@ class TradingBot:
                     self.position = None
                     self.position_size = 0.0
                     self.position_entry_price = 0.0
+                    self.position_high_price = 0.0
             
             elif trading_mode_upper == "FUTURES":
                 # Check futures position
@@ -451,12 +454,14 @@ class TradingBot:
                 self.position = None
                 self.position_size = 0.0
                 self.position_entry_price = 0.0
+                self.position_high_price = 0.0
                 
         except Exception as e:
             logger.warning(f"Bot {self.bot_id}: Could not update position from balance: {e}")
             self.position = None
             self.position_size = 0.0
             self.position_entry_price = 0.0
+            self.position_high_price = 0.0
     
     async def _check_stop_loss_and_take_profit(self, symbol: str, analysis: Dict[str, Any]):
         """Check if stop loss or take profit should be triggered for current position."""
@@ -474,6 +479,11 @@ class TradingBot:
                 pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
             else:
                 return
+            
+            # For LONG positions: Update highest price since entry (for trailing stop)
+            if self.position == "LONG" and current_price > self.position_high_price:
+                self.position_high_price = current_price
+                logger.debug(f"Bot {self.bot_id}: Updated position high price to {self.position_high_price:.8f} (entry: {self.position_entry_price:.8f}, current: {current_price:.8f})")
             
             # Check stop loss (-2%)
             if pnl_percent <= STOP_LOSS_PERCENT:
@@ -532,6 +542,7 @@ class TradingBot:
                             self.position_size = 0.0
                             old_entry_price = self.position_entry_price
                             self.position_entry_price = 0.0
+                            self.position_high_price = 0.0
                             
                             logger.info(f"Bot {self.bot_id}: STOP LOSS executed - SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
                             await self.agent_manager.log_agent_message(
@@ -585,6 +596,7 @@ class TradingBot:
                         self.position = None
                         self.position_size = 0.0
                         self.position_entry_price = 0.0
+                        self.position_high_price = 0.0
                         
                         logger.info(f"Bot {self.bot_id}: STOP LOSS executed - BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
                         await self.agent_manager.log_agent_message(
@@ -594,14 +606,29 @@ class TradingBot:
                         )
                 return
             
-            # Check take profit (2-5%)
-            if TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT:
-                logger.info(f"Bot {self.bot_id}: TAKE PROFIT triggered! Position: {self.position}, Entry: {self.position_entry_price}, Current: {current_price}, P&L: {pnl_percent:.2f}%")
-                await self.agent_manager.log_agent_message(
-                    "CypherTrade",
-                    f"✅ TAKE PROFIT triggered at {pnl_percent:.2f}% profit. Closing position to secure gains.",
-                    "trade"
-                )
+            # Check trailing stop take profit (for LONG positions only)
+            # Sell when price falls 3% from highest price, but only if we're at least 2% in profit
+            if self.position == "LONG" and self.position_high_price > 0:
+                # Calculate percentage drop from high
+                drop_from_high_percent = ((self.position_high_price - current_price) / self.position_high_price) * 100
+                trailing_trigger_price = self.position_high_price * (1 - TAKE_PROFIT_TRAILING_PERCENT / 100)
+                
+                # Check if we should trigger trailing stop:
+                # 1. Current price must be below trailing trigger (3% drop from high)
+                # 2. We must be at least 2% in profit (pnl_percent >= TAKE_PROFIT_MIN_PERCENT)
+                if current_price <= trailing_trigger_price and pnl_percent >= TAKE_PROFIT_MIN_PERCENT:
+                    logger.info(
+                        f"Bot {self.bot_id}: TRAILING STOP TAKE PROFIT triggered! "
+                        f"Position: {self.position}, Entry: {self.position_entry_price:.8f}, "
+                        f"High: {self.position_high_price:.8f}, Current: {current_price:.8f}, "
+                        f"Drop from high: {drop_from_high_percent:.2f}%, P&L: {pnl_percent:.2f}%"
+                    )
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"✅ TRAILING STOP TAKE PROFIT triggered! Price dropped {drop_from_high_percent:.2f}% from high ({self.position_high_price:.8f}) to {current_price:.8f}. "
+                        f"Closing position at {pnl_percent:.2f}% profit.",
+                        "trade"
+                    )
                 
                 # Force close position
                 if self.position == "LONG":
@@ -651,8 +678,9 @@ class TradingBot:
                             self.position_size = 0.0
                             old_entry_price = self.position_entry_price
                             self.position_entry_price = 0.0
+                            self.position_high_price = 0.0
                             
-                            logger.info(f"Bot {self.bot_id}: TAKE PROFIT executed - SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
+                            logger.info(f"Bot {self.bot_id}: TRAILING STOP TAKE PROFIT executed - SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
                             await self.agent_manager.log_agent_message(
                                 "CypherTrade",
                                 f"TAKE PROFIT executed: SELL {quantity} {symbol} at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)",
@@ -704,6 +732,7 @@ class TradingBot:
                         self.position = None
                         self.position_size = 0.0
                         self.position_entry_price = 0.0
+                        self.position_high_price = 0.0
                         
                         logger.info(f"Bot {self.bot_id}: TAKE PROFIT executed - BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
                         await self.agent_manager.log_agent_message(
@@ -810,7 +839,8 @@ class TradingBot:
                     pnl_percent = 0
                 
                 # If position is at stop loss or take profit, close it first
-                if pnl_percent <= STOP_LOSS_PERCENT or (TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT):
+                # Check stop loss only here - trailing stop is handled in _check_stop_loss_and_take_profit
+                if pnl_percent <= STOP_LOSS_PERCENT:
                     logger.warning(f"Bot {self.bot_id}: Position at {pnl_percent:.2f}% P&L (Stop-Loss: {STOP_LOSS_PERCENT}%, Take-Profit: {TAKE_PROFIT_MIN_PERCENT}-{TAKE_PROFIT_MAX_PERCENT}%). Closing position before executing new trade.")
                     await self._check_stop_loss_and_take_profit(symbol, analysis)
                     # After closing position, check if we should still execute the new trade
@@ -985,11 +1015,15 @@ class TradingBot:
                     # Update entry price (weighted average)
                     total_value = (self.position_size - quantity) * self.position_entry_price + quantity * execution_price
                     self.position_entry_price = total_value / self.position_size if self.position_size > 0 else execution_price
+                    # Update high price if execution price is higher
+                    if execution_price > self.position_high_price:
+                        self.position_high_price = execution_price
                 else:
                     # Open new LONG position
                     self.position = "LONG"
                     self.position_size = quantity
                     self.position_entry_price = execution_price
+                    self.position_high_price = execution_price  # Initialize high price to entry price
             
             elif signal == "SELL":
                 # Update position status before executing SELL
@@ -1143,9 +1177,9 @@ class TradingBot:
                         if pnl_percent <= STOP_LOSS_PERCENT:
                             exit_reason = "STOP_LOSS"
                             logger.warning(f"Bot {self.bot_id}: SELL executed but position was at {pnl_percent:.2f}% (Stop-Loss threshold: {STOP_LOSS_PERCENT}%). Marking as STOP_LOSS.")
-                        elif TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT:
+                        elif pnl_percent >= TAKE_PROFIT_MIN_PERCENT:
                             exit_reason = "TAKE_PROFIT"
-                            logger.info(f"Bot {self.bot_id}: SELL executed but position was at {pnl_percent:.2f}% (Take-Profit range: {TAKE_PROFIT_MIN_PERCENT}-{TAKE_PROFIT_MAX_PERCENT}%). Marking as TAKE_PROFIT.")
+                            logger.info(f"Bot {self.bot_id}: SELL executed but position was at {pnl_percent:.2f}% (Take-Profit threshold: >= {TAKE_PROFIT_MIN_PERCENT}%). Marking as TAKE_PROFIT.")
                     
                     # Save trade
                     trade = {
@@ -1190,6 +1224,7 @@ class TradingBot:
                     self.position = None
                     self.position_size = 0.0
                     self.position_entry_price = 0.0
+                    self.position_high_price = 0.0
                     
                     # Build detailed message with delay and slippage info
                     pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
@@ -1256,9 +1291,9 @@ class TradingBot:
                         if pnl_percent <= STOP_LOSS_PERCENT:
                             exit_reason = "STOP_LOSS"
                             logger.warning(f"Bot {self.bot_id}: BUY to close SHORT executed but position was at {pnl_percent:.2f}% (Stop-Loss threshold: {STOP_LOSS_PERCENT}%). Marking as STOP_LOSS.")
-                        elif TAKE_PROFIT_MIN_PERCENT <= pnl_percent <= TAKE_PROFIT_MAX_PERCENT:
+                        elif pnl_percent >= TAKE_PROFIT_MIN_PERCENT:
                             exit_reason = "TAKE_PROFIT"
-                            logger.info(f"Bot {self.bot_id}: BUY to close SHORT executed but position was at {pnl_percent:.2f}% (Take-Profit range: {TAKE_PROFIT_MIN_PERCENT}-{TAKE_PROFIT_MAX_PERCENT}%). Marking as TAKE_PROFIT.")
+                            logger.info(f"Bot {self.bot_id}: BUY to close SHORT executed but position was at {pnl_percent:.2f}% (Take-Profit threshold: >= {TAKE_PROFIT_MIN_PERCENT}%). Marking as TAKE_PROFIT.")
                     
                     # Save trade
                     trade = {
@@ -1304,6 +1339,7 @@ class TradingBot:
                     self.position = None
                     self.position_size = 0.0
                     self.position_entry_price = 0.0
+                    self.position_high_price = 0.0
                     
                     pnl_msg = f" | P/L: {pnl:+.2f} USDT ({pnl_percent:+.2f}%)" if pnl is not None else ""
                     delay_msg = f" | Delay: {execution_delay_seconds:.1f}s" if execution_delay_seconds else ""
