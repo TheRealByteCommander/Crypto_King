@@ -13,6 +13,8 @@ Das Memory-System ermöglicht es jedem Agent:
 
 **WICHTIG:** Das Learning-System wird automatisch bei jedem abgeschlossenen Trade aktiviert. Beide Agents (CypherMind & CypherTrade) lernen aus jedem Trade-Outcome.
 
+**NEU:** Das System trackt jetzt auch kontinuierlich Kerzendaten (Pre-Trade, During-Trade, Post-Trade) für besseres Learning und Vorhersagen. Siehe [CANDLE_TRACKING_IMPLEMENTATION.md](CANDLE_TRACKING_IMPLEMENTATION.md) für Details.
+
 ## 🏗️ Architektur
 
 ### Memory-Typen
@@ -104,7 +106,12 @@ await memory.learn_from_trade(
         "price_slippage_percent": 0.05  # Slippage in %
     },
     outcome="success",  # or "failure", "neutral"
-    profit_loss=100.0
+    profit_loss=100.0,
+    candle_data={  # Optional: Wird automatisch geladen wenn verfügbar
+        "pre_trade": {...},      # 200 Kerzen vor Trade
+        "during_trade": {...},   # Alle Kerzen während Position
+        "post_trade": {...}      # 200 Kerzen nach Verkauf
+    }
 )
 ```
 
@@ -114,6 +121,12 @@ await memory.learn_from_trade(
 - `execution_delay_seconds`: Zeit zwischen Signal und Order-Ausführung
 - `price_slippage`: Absolute Preis-Differenz
 - `price_slippage_percent`: Slippage in Prozent
+
+**Kerzen-Daten für Learning (NEU):**
+- `pre_trade_candles`: 200 Kerzen vor jedem Trade
+- `during_trade_candles`: Alle Kerzen während Position offen ist
+- `post_trade_candles`: 200 Kerzen nach jedem Verkauf
+- Automatische Pattern-Extraktion aus Kerzen-Daten
 
 ## 📊 Pattern Recognition
 
@@ -182,6 +195,13 @@ Learn from trade → Store in memory → Extract lessons
 - 💰 "Positive slippage (+0.15%) - execution price better than expected"
 - 💰 "Negative slippage (-0.32%) - execution price worse than expected, consider faster execution"
 - 💰 "Minimal slippage (0.02%) - good execution quality"
+
+**Kerzen-Pattern Lessons (NEU):**
+- 📊 "Strong upward trend before entry (+3.2%) led to success"
+- 📊 "Price reached 5.8% profit during position but exited at 2.1% - could optimize take-profit strategy"
+- 📊 "Position held for 45 candles - consider earlier exit for losing positions"
+- 📊 "Price was profitable (+4.2%) during position but closed at loss (-1.5%) - should have taken profit earlier"
+- 📊 "Price continued rising after exit (+6.5%) - could have held longer for more profit"
 
 ### 4. Pattern Application
 

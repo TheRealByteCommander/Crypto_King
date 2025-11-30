@@ -8,6 +8,7 @@ from binance_client import BinanceClientWrapper
 from strategies import get_strategy
 from config import settings
 from market_phase_analyzer import MarketPhaseAnalyzer
+from candle_tracker import CandleTracker
 from constants import (
     BOT_LOOP_INTERVAL_SECONDS,
     BOT_ERROR_RETRY_DELAY_SECONDS,
@@ -53,6 +54,8 @@ class TradingBot:
         # Market phase analysis
         self.market_phase_analyzer = MarketPhaseAnalyzer()
         self.current_market_phase = None  # "BULLISH", "BEARISH", "SIDEWAYS"
+        # Candle tracking (initialized when bot starts with binance_client)
+        self.candle_tracker = None
     
     async def start(self, strategy: str, symbol: str, amount: float, timeframe: str = "5m", trading_mode: str = "SPOT") -> Dict[str, Any]:
         """Start the trading bot with specified parameters."""
@@ -62,6 +65,9 @@ class TradingBot:
             
             # Initialize Binance client (can be shared across bots)
             self.binance_client = BinanceClientWrapper()
+            
+            # Initialize CandleTracker for continuous candle tracking
+            self.candle_tracker = CandleTracker(self.db, self.binance_client)
             
             # Validate trading mode
             valid_modes = ["SPOT", "MARGIN", "FUTURES"]
@@ -343,6 +349,18 @@ class TradingBot:
                 logger.info(f"Bot {self.bot_id}: Fetching market data (timeframe: {timeframe})...")
                 market_data = self.binance_client.get_market_data(symbol, interval=timeframe, limit=100)
                 
+                # Step 1.5: Track Pre-Trade candles (200 candles for better predictions)
+                if self.candle_tracker:
+                    try:
+                        await self.candle_tracker.track_pre_trade_candles(
+                            bot_id=self.bot_id,
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            limit=200
+                        )
+                    except Exception as e:
+                        logger.warning(f"Bot {self.bot_id}: Fehler beim Pre-Trade-Kerzen-Tracking: {e}")
+                
                 # Step 2: Analyze market phase
                 market_phase_analysis = self.market_phase_analyzer.analyze_phase(market_data, lookback_periods=20)
                 self.current_market_phase = market_phase_analysis.get("phase")
@@ -396,6 +414,28 @@ class TradingBot:
                 # Step 5: Check stop loss and take profit for existing positions BEFORE executing new trades
                 if self.position is not None and self.position_entry_price > 0:
                     await self._check_stop_loss_and_take_profit(symbol, analysis)
+                
+                # Step 5.5: Update Position-Tracking (wenn Position offen ist) und Post-Trade-Tracking
+                if self.candle_tracker:
+                    try:
+                        # Update Position-Tracking, wenn Position offen ist
+                        if self.position is not None:
+                            await self.candle_tracker.update_position_tracking(self.bot_id)
+                        
+                        # Find active post-trade tracking for this bot
+                        active_post_trades = await self.db.bot_candles.find({
+                            "bot_id": self.bot_id,
+                            "phase": "post_trade",
+                            "count": {"$lt": 200}  # Noch nicht abgeschlossen
+                        }).to_list(100)
+                        
+                        # Update each active post-trade tracking
+                        for post_trade in active_post_trades:
+                            trade_id = post_trade.get("trade_id")
+                            if trade_id:
+                                await self.candle_tracker.update_post_trade_tracking(trade_id)
+                    except Exception as e:
+                        logger.warning(f"Bot {self.bot_id}: Fehler beim Update von Position/Post-Trade-Tracking: {e}")
                 
                 # Step 6: Execute trade if signal is strong enough
                 if signal in ["BUY", "SELL"] and confidence >= 0.6:
@@ -559,6 +599,22 @@ class TradingBot:
                                 "position_entry_price": self.position_entry_price
                             }
                             await self.db.trades.insert_one(trade)
+                            
+                            # Stop Position-Tracking before resetting position
+                            if self.candle_tracker:
+                                try:
+                                    sell_trade_id = str(order.get("orderId", ""))
+                                    await self.candle_tracker.stop_position_tracking(self.bot_id, sell_trade_id)
+                                except Exception as e:
+                                    logger.warning(f"Bot {self.bot_id}: Fehler beim Stoppen von Position-Tracking: {e}")
+                            
+                            # Stop Position-Tracking before resetting position
+                            if self.candle_tracker:
+                                try:
+                                    sell_trade_id = str(order.get("orderId", ""))
+                                    await self.candle_tracker.stop_position_tracking(self.bot_id, sell_trade_id)
+                                except Exception as e:
+                                    logger.warning(f"Bot {self.bot_id}: Fehler beim Stoppen von Position-Tracking: {e}")
                             
                             # Learn from closed position
                             if pnl is not None:
@@ -734,6 +790,14 @@ class TradingBot:
                             }
                             await self.db.trades.insert_one(trade)
                             
+                            # Stop Position-Tracking before resetting position
+                            if self.candle_tracker:
+                                try:
+                                    sell_trade_id = str(order.get("orderId", ""))
+                                    await self.candle_tracker.stop_position_tracking(self.bot_id, sell_trade_id)
+                                except Exception as e:
+                                    logger.warning(f"Bot {self.bot_id}: Fehler beim Stoppen von Position-Tracking: {e}")
+                            
                             # Learn from closed position
                             if pnl is not None:
                                 await self._learn_from_closed_position(trade, pnl, self.position_entry_price, execution_price)
@@ -834,14 +898,83 @@ class TradingBot:
                 "bot_id": self.bot_id
             }
             
-            # Learn for CypherMind (decision maker)
-            cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
-            await cyphermind_memory.learn_from_trade(learning_trade, outcome, pnl)
-            logger.info(f"Bot {self.bot_id}: CypherMind learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
+            # Get candle data for learning (if available)
+            candle_data = None
+            if self.candle_tracker:
+                try:
+                    trade_id = str(trade.get("order_id", ""))
+                    symbol = trade.get("symbol", "")
+                    buy_trade_id = trade.get("buy_trade_id")  # Falls vorhanden
+                    
+                    # Get pre-trade candles
+                    pre_trade_result = await self.candle_tracker.get_bot_candles(self.bot_id, "pre_trade", symbol)
+                    pre_trade_candles = None
+                    if pre_trade_result.get("success") and pre_trade_result.get("candles_data"):
+                        # Get most recent pre_trade candles for this symbol
+                        for candle_set in pre_trade_result["candles_data"]:
+                            if candle_set.get("symbol") == symbol:
+                                pre_trade_candles = candle_set
+                                break
+                    
+                    # Get position candles (during_trade) - wenn SELL, hole Position-Daten
+                    during_trade_candles = None
+                    if buy_trade_id:
+                        # Versuche Position-Tracking-Daten über buy_trade_id zu finden
+                        position_doc = await self.db.bot_candles.find_one({
+                            "bot_id": self.bot_id,
+                            "phase": "during_trade",
+                            "buy_trade_id": buy_trade_id
+                        })
+                        if position_doc:
+                            during_trade_candles = {
+                                "count": position_doc.get("count", 0),
+                                "candles": position_doc.get("candles", []),
+                                "buy_trade_id": buy_trade_id,
+                                "sell_trade_id": position_doc.get("sell_trade_id")
+                            }
+                    else:
+                        # Fallback: Finde aktuelle geschlossene Position für diesen Bot
+                        position_doc = await self.db.bot_candles.find_one({
+                            "bot_id": self.bot_id,
+                            "phase": "during_trade",
+                            "symbol": symbol,
+                            "position_status": "closed"
+                        }, sort=[("updated_at", -1)])
+                        if position_doc:
+                            during_trade_candles = {
+                                "count": position_doc.get("count", 0),
+                                "candles": position_doc.get("candles", []),
+                                "buy_trade_id": position_doc.get("buy_trade_id"),
+                                "sell_trade_id": position_doc.get("sell_trade_id")
+                            }
+                    
+                    # Get post-trade candles (if available)
+                    post_trade_candles = None
+                    if trade_id:
+                        post_result = await self.candle_tracker.get_trade_candles(trade_id, "post_trade")
+                        if post_result.get("success"):
+                            post_trade_candles = {
+                                "count": post_result.get("count", 0),
+                                "candles": post_result.get("candles", [])
+                            }
+                    
+                    if pre_trade_candles or during_trade_candles or post_trade_candles:
+                        candle_data = {
+                            "pre_trade": pre_trade_candles,
+                            "during_trade": during_trade_candles,
+                            "post_trade": post_trade_candles
+                        }
+                except Exception as e:
+                    logger.warning(f"Bot {self.bot_id}: Fehler beim Abrufen von Kerzen-Daten für Learning: {e}")
             
-            # Learn for CypherTrade (executor)
+            # Learn for CypherMind (decision maker) - with candle data
+            cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
+            await cyphermind_memory.learn_from_trade(learning_trade, outcome, pnl, candle_data)
+            logger.info(f"Bot {self.bot_id}: CypherMind learned from trade: {outcome} (P&L: {pnl:.2f} USDT)" + (" - with candle patterns" if candle_data else ""))
+            
+            # Learn for CypherTrade (executor) - with candle data
             cyphertrade_memory = self.agent_manager.memory_manager.get_agent_memory("CypherTrade")
-            await cyphertrade_memory.learn_from_trade(learning_trade, outcome, pnl)
+            await cyphertrade_memory.learn_from_trade(learning_trade, outcome, pnl, candle_data)
             logger.info(f"Bot {self.bot_id}: CypherTrade learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
             
             # Store collective memory about trade outcome
@@ -855,6 +988,28 @@ class TradingBot:
                     "bot_id": self.bot_id
                 }
             )
+            
+            # Start Post-Trade-Tracking after SELL (position closed)
+            # Track next 200 candles to learn if selling was optimal timing
+            if self.candle_tracker and trade.get("side") == "SELL":
+                try:
+                    symbol = trade.get("symbol", "")
+                    timeframe = self.current_config.get("timeframe", "5m") if self.current_config else "5m"
+                    trade_id = str(trade.get("order_id", ""))
+                    
+                    if trade_id:
+                        tracking_result = await self.candle_tracker.start_post_trade_tracking(
+                            bot_id=self.bot_id,
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            trade_id=trade_id
+                        )
+                        if tracking_result.get("success"):
+                            logger.info(f"Bot {self.bot_id}: Post-Trade-Tracking gestartet für Trade {trade_id} ({symbol})")
+                        else:
+                            logger.warning(f"Bot {self.bot_id}: Post-Trade-Tracking konnte nicht gestartet werden: {tracking_result.get('error')}")
+                except Exception as e:
+                    logger.warning(f"Bot {self.bot_id}: Fehler beim Starten von Post-Trade-Tracking: {e}")
             
         except Exception as e:
             logger.error(f"Bot {self.bot_id}: Error learning from closed position: {e}", exc_info=True)
@@ -1088,6 +1243,22 @@ class TradingBot:
                     self.position_size = quantity
                     self.position_entry_price = execution_price
                     self.position_high_price = execution_price  # Initialize high price to entry price
+                    
+                    # Start Position-Tracking für neue Position
+                    if self.candle_tracker:
+                        try:
+                            buy_trade_id = str(order.get("orderId", ""))
+                            timeframe = self.current_config.get("timeframe", "5m")
+                            tracking_result = await self.candle_tracker.start_position_tracking(
+                                bot_id=self.bot_id,
+                                symbol=symbol,
+                                timeframe=timeframe,
+                                buy_trade_id=buy_trade_id
+                            )
+                            if tracking_result.get("success"):
+                                logger.info(f"Bot {self.bot_id}: Position-Tracking gestartet nach BUY {buy_trade_id}")
+                        except Exception as e:
+                            logger.warning(f"Bot {self.bot_id}: Fehler beim Starten von Position-Tracking: {e}")
             
             elif signal == "SELL":
                 # Update position status before executing SELL
@@ -1283,6 +1454,19 @@ class TradingBot:
                     old_entry_price = self.position_entry_price
                     if pnl is not None and old_entry_price > 0:
                         await self._learn_from_closed_position(trade, pnl, old_entry_price, current_price)
+                    
+                    # Stop Position-Tracking before resetting position
+                    if self.candle_tracker:
+                        try:
+                            sell_trade_id = str(order.get("orderId", ""))
+                            stop_result = await self.candle_tracker.stop_position_tracking(
+                                bot_id=self.bot_id,
+                                sell_trade_id=sell_trade_id
+                            )
+                            if stop_result.get("success"):
+                                logger.info(f"Bot {self.bot_id}: Position-Tracking gestoppt nach SELL {sell_trade_id} ({stop_result.get('candles_collected', 0)} Kerzen gesammelt)")
+                        except Exception as e:
+                            logger.warning(f"Bot {self.bot_id}: Fehler beim Stoppen von Position-Tracking: {e}")
                     
                     # Position closed
                     self.position = None

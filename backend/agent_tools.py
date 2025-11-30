@@ -262,6 +262,29 @@ class AgentTools:
                         "required": []
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_bot_candles",
+                    "description": "Get tracked candle data for a bot. Returns the last 200 candles before trades (pre_trade) or 200 candles after sales (post_trade). Use this to analyze patterns and improve predictions.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "bot_id": {
+                                "type": "string",
+                                "description": "Bot ID to get candles for"
+                            },
+                            "phase": {
+                                "type": "string",
+                                "enum": ["pre_trade", "post_trade", "during_trade", "all"],
+                                "description": "Which phase to get candles from: 'pre_trade' (200 candles before trades), 'during_trade' (all candles while position is open), 'post_trade' (200 candles after sales), or 'all' (default: 'pre_trade')",
+                                "default": "pre_trade"
+                            }
+                        },
+                        "required": ["bot_id"]
+                    }
+                }
             }
         ]
     
@@ -1129,6 +1152,62 @@ class AgentTools:
                 except Exception as e:
                     logger.error(f"Error getting autonomous bots status: {e}", exc_info=True)
                     return {"error": f"Error getting status: {str(e)}", "success": False}
+            
+            elif tool_name == "get_bot_candles":
+                try:
+                    if agent_name != "CypherMind":
+                        return {"error": "Only CypherMind can access bot candles", "success": False}
+                    
+                    if self.bot is None:
+                        return {"error": "Bot manager not available", "success": False}
+                    
+                    from bot_manager import BotManager
+                    if not isinstance(self.bot, BotManager):
+                        return {"error": "Bot manager not available", "success": False}
+                    
+                    bot_id = parameters.get("bot_id")
+                    phase = parameters.get("phase", "pre_trade")
+                    
+                    if not bot_id:
+                        return {"error": "bot_id parameter is required", "success": False}
+                    
+                    # Get the bot instance
+                    all_bots = self.bot.get_all_bots()
+                    if bot_id not in all_bots:
+                        return {"error": f"Bot {bot_id} not found", "success": False}
+                    
+                    bot_instance = all_bots[bot_id]
+                    
+                    # Check if bot has candle_tracker
+                    if not hasattr(bot_instance, 'candle_tracker') or bot_instance.candle_tracker is None:
+                        return {"error": "Candle tracker not available for this bot", "success": False}
+                    
+                    candle_tracker = bot_instance.candle_tracker
+                    
+                    # Get candles based on phase
+                    if phase == "both":
+                        pre_result = await candle_tracker.get_bot_candles(bot_id, "pre_trade")
+                        post_result = await candle_tracker.get_bot_candles(bot_id, "post_trade")
+                        
+                        return {
+                            "success": True,
+                            "bot_id": bot_id,
+                            "pre_trade": pre_result,
+                            "post_trade": post_result
+                        }
+                    else:
+                        result = await candle_tracker.get_bot_candles(bot_id, phase)
+                        
+                        return {
+                            "success": True,
+                            "bot_id": bot_id,
+                            "phase": phase,
+                            "result": result
+                        }
+                
+                except Exception as e:
+                    logger.error(f"Error getting bot candles: {e}", exc_info=True)
+                    return {"error": f"Error getting candles: {str(e)}", "success": False}
             
             else:
                 return {"error": f"Unknown tool: {tool_name}", "success": False}

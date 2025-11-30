@@ -44,6 +44,7 @@ http://localhost:3000
 - Real-time Performance Tracking
 - Portfolio Management mit Multi-Asset Support
 - **AI Learning System**: Agents lernen aus jedem Trade
+- **Kerzen-Tracking-System**: Kontinuierliches Tracking von 200 Kerzen vor Trades, allen Kerzen während Positionen, und 200 Kerzen nach Verkäufen für bessere Vorhersagen
 
 ### 📊 Dashboard
 - Live Performance Charts (Recharts)
@@ -63,6 +64,7 @@ http://localhost:3000
 - **Strategie-Parameter anpassbar**
 - **Agent Tools System** (Funktionsaufrufe für Agents)
 - **Memory & Learning System** (Agents lernen aus Trades)
+- **Candle Tracking System** (Pre-Trade, During-Trade, Post-Trade Tracking für optimales Learning)
 - **MCP Server** (Model Context Protocol Integration)
 - **Sicheres News-System** (NexusChat: Whitelist-basierte Krypto-News mit Spam-Filter)
 
@@ -98,6 +100,8 @@ http://localhost:3000
 | [AGENT_CONFIG_GUIDE.md](AGENT_CONFIG_GUIDE.md) | ⚙️ Agent-Anpassung ohne Code |
 | [AGENT_TOOLS.md](AGENT_TOOLS.md) | 🛠️ Agent Tools & Funktionsaufrufe |
 | [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) | 🧠 AI Learning & Memory System |
+| [CANDLE_TRACKING_IMPLEMENTATION.md](CANDLE_TRACKING_IMPLEMENTATION.md) | 📊 Kerzen-Tracking-System (Pre-Trade, During-Trade, Post-Trade) |
+| [POSITION_TRACKING_UPDATE.md](POSITION_TRACKING_UPDATE.md) | 📈 Position-Tracking zwischen Kauf und Verkauf |
 | [MCP_SERVER.md](MCP_SERVER.md) | 🔌 MCP Server Integration |
 | [CRYPTO_NEWS_SYSTEM.md](CRYPTO_NEWS_SYSTEM.md) | 📰 Sicheres Krypto-News-System für NexusChat |
 | [AUTONOMOUS_BOTS.md](AUTONOMOUS_BOTS.md) | 🤖 Autonome Bot-Verwaltung durch CypherMind |
@@ -407,6 +411,7 @@ class MyStrategy(TradingStrategy):
 - [x] Agent Tools System ✅
 - [x] Portfolio Management ✅
 - [x] MCP Server Integration ✅
+- [x] Candle Tracking System ✅ (Pre-Trade, During-Trade, Post-Trade)
 - [ ] Backtesting Framework
 - [ ] Multi-Symbol Trading (gleichzeitig)
 - [ ] Advanced Risk Management
@@ -463,10 +468,16 @@ Bei Fragen oder Problemen:
 - ✅ **Trading Modes**: SPOT, MARGIN, FUTURES mit Short Trading Support
 - ✅ **Flexible Timeframes**: Von 1 Minute bis 1 Monat
 - ✅ **Memory System**: Agents lernen aus vergangenen Trades
+- ✅ **Kerzen-Tracking-System**: Kontinuierliches Tracking von Pre-Trade, During-Trade und Post-Trade Kerzen
 - ✅ **Agent Tools**: Funktionale Tools für alle Agents
 - ✅ **Portfolio Management**: Multi-Asset Tracking mit P&L
 - ✅ **MCP Server**: Model Context Protocol Integration
 - ✅ **Volatile Assets Discovery**: Automatische Erkennung volatiler Märkte
+
+### Neueste Updates
+- 🆕 **Candle Tracking System**: Vollständiges Tracking von 200 Kerzen vor Trades, allen Kerzen während Positionen, und 200 Kerzen nach Verkäufen
+- 🆕 **Position Tracking**: Kontinuierliches Tracking aller Kursdaten zwischen Kauf und Verkauf
+- 🆕 **Enhanced Learning**: Pattern-Erkennung aus Kerzen-Daten für bessere Vorhersagen
 
 ### Weitere Dokumentation
 - [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md) - Detaillierte Strategie-Dokumentation

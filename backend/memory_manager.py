@@ -82,8 +82,8 @@ class AgentMemory:
             logger.error(f"Error retrieving memories for {self.agent_name}: {e}")
             return []
     
-    async def learn_from_trade(self, trade: Dict[str, Any], outcome: str, profit_loss: float):
-        """Learn from a completed trade."""
+    async def learn_from_trade(self, trade: Dict[str, Any], outcome: str, profit_loss: float, candle_data: Optional[Dict[str, Any]] = None):
+        """Learn from a completed trade, optionally including candle data for better learning."""
         try:
             # Extract delay and slippage information for learning
             execution_delay = trade.get("execution_delay_seconds")
@@ -110,6 +110,16 @@ class AgentMemory:
                 "price_slippage_percent": price_slippage_percent,  # Slippage in %
                 "lessons": self._extract_lessons(trade, outcome, profit_loss, execution_delay, price_slippage_percent)
             }
+            
+            # Add candle data if available for better pattern recognition
+            if candle_data:
+                learning_entry["pre_trade_candles"] = candle_data.get("pre_trade", {})
+                learning_entry["during_trade_candles"] = candle_data.get("during_trade", {})  # Position-Tracking
+                learning_entry["post_trade_candles"] = candle_data.get("post_trade", {})
+                # Extract patterns from candles for learning
+                candle_lessons = self._extract_candle_patterns(candle_data, outcome, profit_loss)
+                if candle_lessons:
+                    learning_entry["lessons"].extend(candle_lessons)
             
             await self.store_memory(
                 memory_type="trade_learning",
@@ -154,6 +164,89 @@ class AgentMemory:
                     lessons.append(f"Negative slippage ({price_slippage_percent:.2f}%) - execution price worse than expected, consider faster execution")
             else:
                 lessons.append(f"Minimal slippage ({price_slippage_percent:.2f}%) - good execution quality")
+        
+        return lessons
+    
+    def _extract_candle_patterns(self, candle_data: Dict[str, Any], outcome: str, profit_loss: float) -> List[str]:
+        """Extract lessons from candle patterns before, during, and after trades."""
+        lessons = []
+        
+        try:
+            pre_trade = candle_data.get("pre_trade", {})
+            during_trade = candle_data.get("during_trade", {})  # Position-Tracking
+            post_trade = candle_data.get("post_trade", {})
+            
+            if pre_trade and pre_trade.get("candles"):
+                pre_candles = pre_trade["candles"]
+                if len(pre_candles) >= 10:
+                    # Analyze price trend before trade
+                    first_price = pre_candles[0].get("close", 0)
+                    last_price = pre_candles[-1].get("close", 0)
+                    
+                    if first_price > 0:
+                        pre_trend = ((last_price - first_price) / first_price) * 100
+                        
+                        if outcome == "success":
+                            if pre_trend > 2:
+                                lessons.append(f"Strong upward trend before entry ({pre_trend:.2f}%) led to success")
+                            elif pre_trend < -2:
+                                lessons.append(f"Rebound from downtrend ({pre_trend:.2f}%) led to success - good timing")
+                        elif outcome == "failure":
+                            if pre_trend < -2:
+                                lessons.append(f"Downward trend before entry ({pre_trend:.2f}%) led to failure - avoid trading in downtrends")
+            
+            if post_trade and post_trade.get("candles"):
+                post_candles = post_trade["candles"]
+                if len(post_candles) >= 10:
+                    # Analyze price movement after trade
+                    exit_price = post_candles[0].get("open", 0) if post_candles else 0
+                    latest_price = post_candles[-1].get("close", 0) if post_candles else 0
+                    
+                    if exit_price > 0:
+                        post_move = ((latest_price - exit_price) / exit_price) * 100
+                        
+                        if outcome == "success":
+                            if post_move > 5:
+                                lessons.append(f"Price continued rising after exit (+{post_move:.2f}%) - could have held longer for more profit")
+                            elif post_move < -5:
+                                lessons.append(f"Price dropped after exit (-{post_move:.2f}%) - good exit timing")
+                        elif outcome == "failure":
+                            if post_move > 5:
+                                lessons.append(f"Price recovered after exit (+{post_move:.2f}%) - exited too early, should have held")
+                            elif post_move < -5:
+                                lessons.append(f"Price continued dropping after exit (-{post_move:.2f}%) - good exit timing despite loss")
+            
+            # Analyze during_trade (Position-Tracking) candles
+            if during_trade and during_trade.get("candles"):
+                during_candles = during_trade["candles"]
+                if len(during_candles) >= 10:
+                    # Analyze price movement during position holding
+                    entry_price = during_candles[0].get("open", 0) if during_candles else 0
+                    exit_price = during_candles[-1].get("close", 0) if during_candles else 0
+                    
+                    # Find highest price during position
+                    high_price = max(c.get("high", 0) for c in during_candles) if during_candles else 0
+                    
+                    if entry_price > 0 and exit_price > 0:
+                        total_move = ((exit_price - entry_price) / entry_price) * 100
+                        high_move = ((high_price - entry_price) / entry_price) * 100
+                        
+                        if outcome == "success":
+                            if high_move > total_move + 3:
+                                lessons.append(f"Price reached {high_move:.2f}% profit during position but exited at {total_move:.2f}% - could optimize take-profit strategy")
+                            elif total_move > 5:
+                                lessons.append(f"Strong price movement during position ({total_move:.2f}%) - good holding strategy")
+                        elif outcome == "failure":
+                            if high_move > abs(total_move) + 2:
+                                lessons.append(f"Price was profitable ({high_move:.2f}%) during position but closed at loss ({total_move:.2f}%) - should have taken profit earlier")
+                            
+                            # Analyze position duration (number of candles)
+                            position_duration = len(during_candles)
+                            if position_duration > 50:  # Wenn Position sehr lange gehalten wurde
+                                lessons.append(f"Position held for {position_duration} candles - consider earlier exit for losing positions")
+        
+        except Exception as e:
+            logger.warning(f"Error extracting candle patterns: {e}")
         
         return lessons
     

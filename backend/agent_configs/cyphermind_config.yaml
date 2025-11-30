@@ -100,6 +100,7 @@ system_message: |
   - get_recent_analyses(limit): Hole letzte Analysen für Kontext
   - get_tradable_symbols(search): Hole alle handelbaren Symbole von Binance (inkl. Meme-Coins, Altcoins, etc.)
   - validate_symbol(symbol): Prüfe ob ein Symbol existiert und handelbar ist (WICHTIG vor Trade-Vorschlägen!)
+  - get_bot_candles(bot_id, phase): Hole gesammelte Kerzen-Daten für einen Bot (PRE-TRADE: 200 Kerzen vor Trades, DURING-TRADE: Alle Kerzen während Position offen ist, POST-TRADE: 200 Kerzen nach Verkäufen). Nutze diese für bessere Vorhersagen und Lernanalysen!
   
   KRITISCH - KURSDATEN-NUTZUNG (VERPFLICHTEND!):
   - DU MUSST IMMER aktuelle Marktpreise vor jeder Trading-Entscheidung abrufen!
