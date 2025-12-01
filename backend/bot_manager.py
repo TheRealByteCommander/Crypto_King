@@ -573,9 +573,30 @@ class TradingBot:
                             quantity = adjusted_quantity
                             order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
                             
+                            # Get execution price from order if available
+                            execution_price = current_price
+                            if order.get("fills"):
+                                fills = order.get("fills", [])
+                                if fills:
+                                    total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                                    total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                                    if total_qty > 0:
+                                        execution_price = total_quote / total_qty
+                            elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
+                                execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                            
                             # Calculate final P&L
-                            pnl = (current_price - self.position_entry_price) * quantity
-                            pnl_percent_final = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                            pnl = (execution_price - self.position_entry_price) * quantity
+                            pnl_percent_final = ((execution_price - self.position_entry_price) / self.position_entry_price) * 100
+                            
+                            # Calculate quote_qty (USDT value) - prefer from order, fallback to calculation
+                            quote_qty_from_order = float(order.get("cummulativeQuoteQty", 0))
+                            if quote_qty_from_order > 0:
+                                quote_qty = quote_qty_from_order
+                            else:
+                                # Fallback: calculate from execution_price * quantity
+                                quote_qty = execution_price * quantity
+                                logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                             
                             # Save trade
                             trade = {
@@ -586,8 +607,9 @@ class TradingBot:
                                 "order_id": str(order.get("orderId", "")),
                                 "status": order.get("status", ""),
                                 "executed_qty": float(order.get("executedQty", 0)),
-                                "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                                "entry_price": current_price,
+                                "quote_qty": quote_qty,  # USDT value - always set correctly
+                                "entry_price": execution_price,
+                                "execution_price": execution_price,
                                 "strategy": self.current_config["strategy"],
                                 "trading_mode": trading_mode,
                                 "confidence": analysis.get("confidence", 0.0),
@@ -643,9 +665,30 @@ class TradingBot:
                         quantity = adjusted_quantity
                         order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                         
+                        # Get execution price from order if available
+                        execution_price = current_price
+                        if order.get("fills"):
+                            fills = order.get("fills", [])
+                            if fills:
+                                total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                                total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                                if total_qty > 0:
+                                    execution_price = total_quote / total_qty
+                        elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
+                            execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                        
                         # Calculate final P&L (for SHORT: profit when price goes down)
-                        pnl = (self.position_entry_price - current_price) * quantity
-                        pnl_percent_final = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                        pnl = (self.position_entry_price - execution_price) * quantity
+                        pnl_percent_final = ((self.position_entry_price - execution_price) / self.position_entry_price) * 100
+                        
+                        # Calculate quote_qty (USDT value) - prefer from order, fallback to calculation
+                        quote_qty_from_order = float(order.get("cummulativeQuoteQty", 0))
+                        if quote_qty_from_order > 0:
+                            quote_qty = quote_qty_from_order
+                        else:
+                            # Fallback: calculate from execution_price * quantity
+                            quote_qty = execution_price * quantity
+                            logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                         
                         # Save trade
                         trade = {
@@ -656,8 +699,9 @@ class TradingBot:
                             "order_id": str(order.get("orderId", "")),
                             "status": order.get("status", ""),
                             "executed_qty": float(order.get("executedQty", 0)),
-                            "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                            "entry_price": current_price,
+                            "quote_qty": quote_qty,  # USDT value - always set correctly
+                            "entry_price": execution_price,
+                            "execution_price": execution_price,
                             "strategy": self.current_config["strategy"],
                             "trading_mode": trading_mode,
                             "position_type": "SHORT_CLOSE",
@@ -766,6 +810,15 @@ class TradingBot:
                             pnl = (execution_price - self.position_entry_price) * quantity
                             pnl_percent_final = ((execution_price - self.position_entry_price) / self.position_entry_price) * 100
                             
+                            # Calculate quote_qty (USDT value) - prefer from order, fallback to calculation
+                            quote_qty_from_order = float(order.get("cummulativeQuoteQty", 0))
+                            if quote_qty_from_order > 0:
+                                quote_qty = quote_qty_from_order
+                            else:
+                                # Fallback: calculate from execution_price * quantity
+                                quote_qty = execution_price * quantity
+                                logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
+                            
                             # Save trade
                             trade = {
                                 "bot_id": self.bot_id,
@@ -775,9 +828,10 @@ class TradingBot:
                                 "order_id": str(order.get("orderId", "")),
                                 "status": order.get("status", ""),
                                 "executed_qty": float(order.get("executedQty", 0)),
-                                "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                                "quote_qty": quote_qty,  # USDT value - always set correctly
                                 "entry_price": execution_price,
                                 "exit_price": execution_price,
+                                "execution_price": execution_price,
                                 "strategy": self.current_config["strategy"],
                                 "trading_mode": trading_mode,
                                 "confidence": analysis.get("confidence", 0.0),
@@ -825,9 +879,30 @@ class TradingBot:
                         quantity = adjusted_quantity
                         order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                         
+                        # Get execution price from order if available
+                        execution_price = current_price
+                        if order.get("fills"):
+                            fills = order.get("fills", [])
+                            if fills:
+                                total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                                total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                                if total_qty > 0:
+                                    execution_price = total_quote / total_qty
+                        elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
+                            execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                        
                         # Calculate final P&L (for SHORT: profit when price goes down)
-                        pnl = (self.position_entry_price - current_price) * quantity
-                        pnl_percent_final = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                        pnl = (self.position_entry_price - execution_price) * quantity
+                        pnl_percent_final = ((self.position_entry_price - execution_price) / self.position_entry_price) * 100
+                        
+                        # Calculate quote_qty (USDT value) - prefer from order, fallback to calculation
+                        quote_qty_from_order = float(order.get("cummulativeQuoteQty", 0))
+                        if quote_qty_from_order > 0:
+                            quote_qty = quote_qty_from_order
+                        else:
+                            # Fallback: calculate from execution_price * quantity
+                            quote_qty = execution_price * quantity
+                            logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                         
                         # Save trade
                         trade = {
@@ -838,8 +913,9 @@ class TradingBot:
                             "order_id": str(order.get("orderId", "")),
                             "status": order.get("status", ""),
                             "executed_qty": float(order.get("executedQty", 0)),
-                            "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                            "entry_price": current_price,
+                            "quote_qty": quote_qty,  # USDT value - always set correctly
+                            "entry_price": execution_price,
+                            "execution_price": execution_price,
                             "strategy": self.current_config["strategy"],
                             "trading_mode": trading_mode,
                             "position_type": "SHORT_CLOSE",
@@ -1211,6 +1287,15 @@ class TradingBot:
                     price_slippage = execution_price - decision_price
                     price_slippage_percent = ((execution_price - decision_price) / decision_price) * 100
                 
+                # Calculate quote_qty (USDT value) - prefer from order, fallback to calculation
+                quote_qty_from_order = float(order.get("cummulativeQuoteQty", 0))
+                if quote_qty_from_order > 0:
+                    quote_qty = quote_qty_from_order
+                else:
+                    # Fallback: calculate from execution_price * quantity
+                    quote_qty = execution_price * quantity
+                    logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
+                
                 # Save trade to database
                 trade = {
                     "bot_id": self.bot_id,
@@ -1220,7 +1305,7 @@ class TradingBot:
                     "order_id": str(order.get("orderId", "")),
                     "status": order.get("status", ""),
                     "executed_qty": float(order.get("executedQty", 0)),
-                    "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                    "quote_qty": quote_qty,  # USDT value - always set correctly
                     "entry_price": execution_price,  # Use actual execution price
                     "decision_price": decision_price if decision_price else None,  # Price at signal generation
                     "execution_price": execution_price,  # Actual execution price
@@ -1440,6 +1525,15 @@ class TradingBot:
                             exit_reason = "TAKE_PROFIT"
                             logger.info(f"Bot {self.bot_id}: SELL executed but position was at {pnl_percent:.2f}% (Take-Profit threshold: >= {TAKE_PROFIT_MIN_PERCENT}%). Marking as TAKE_PROFIT.")
                     
+                    # Calculate quote_qty (USDT value) - prefer from order, fallback to calculation
+                    quote_qty_from_order = float(order.get("cummulativeQuoteQty", 0))
+                    if quote_qty_from_order > 0:
+                        quote_qty = quote_qty_from_order
+                    else:
+                        # Fallback: calculate from execution_price * quantity
+                        quote_qty = execution_price * quantity
+                        logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
+                    
                     # Save trade
                     trade = {
                         "bot_id": self.bot_id,
@@ -1449,7 +1543,7 @@ class TradingBot:
                         "order_id": str(order.get("orderId", "")),
                         "status": order.get("status", ""),
                         "executed_qty": float(order.get("executedQty", 0)),
-                        "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
+                        "quote_qty": quote_qty,  # USDT value - always set correctly
                         "entry_price": execution_price,  # Use actual execution price
                         "decision_price": decision_price if decision_price else None,  # Price at signal generation
                         "execution_price": execution_price,  # Actual execution price

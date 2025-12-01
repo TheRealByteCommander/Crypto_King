@@ -743,7 +743,25 @@ class AgentManager:
                     if recent_trades:
                         context_parts.append(f"\n[LETZTE TRADES]")
                         for trade in recent_trades[:3]:  # Show only last 3
-                            trade_info = f"- {trade.get('side', 'N/A')} {trade.get('symbol', 'N/A')}: {trade.get('quantity', 0)} @ {trade.get('price', 0)} USDT"
+                            side = trade.get('side', 'N/A')
+                            symbol = trade.get('symbol', 'N/A')
+                            quantity = trade.get('quantity', 0)
+                            
+                            # Get USDT value - prefer quote_qty, fallback to execution_price * quantity
+                            quote_qty = trade.get('quote_qty', 0)
+                            execution_price = trade.get('execution_price') or trade.get('entry_price')
+                            
+                            if quote_qty and quote_qty > 0:
+                                usdt_value = quote_qty
+                            elif execution_price and execution_price > 0 and quantity > 0:
+                                usdt_value = execution_price * quantity
+                            else:
+                                usdt_value = 0
+                            
+                            # Format trade info with proper USDT value
+                            trade_info = f"- {side} {symbol}: {quantity} @ {usdt_value:.2f} USDT"
+                            if execution_price:
+                                trade_info += f" (Preis: {execution_price:.6f})"
                             context_parts.append(trade_info)
                 except Exception as e:
                     logger.warning(f"Could not get recent trades for context: {e}")

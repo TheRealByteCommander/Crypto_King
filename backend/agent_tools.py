@@ -787,12 +787,30 @@ class AgentTools:
                     query["symbol"] = symbol.upper()
                 
                 trades = await self.db.trades.find(query).sort("timestamp", -1).limit(limit).to_list(limit)
-                # Convert ObjectId to string
+                # Convert ObjectId to string and ensure USDT values are properly calculated
                 from bson import ObjectId
+                formatted_trades = []
                 for trade in trades:
                     if '_id' in trade and isinstance(trade['_id'], ObjectId):
                         trade['_id'] = str(trade['_id'])
-                return {"success": True, "count": len(trades), "trades": trades}
+                    
+                    # Ensure quote_qty (USDT value) is properly set
+                    quote_qty = trade.get('quote_qty', 0)
+                    execution_price = trade.get('execution_price') or trade.get('entry_price')
+                    quantity = trade.get('quantity', 0)
+                    
+                    # If quote_qty is 0 or missing, calculate it from execution_price * quantity
+                    if (not quote_qty or quote_qty == 0) and execution_price and execution_price > 0 and quantity > 0:
+                        quote_qty = execution_price * quantity
+                        trade['quote_qty'] = quote_qty
+                        trade['quote_qty_calculated'] = True  # Flag to indicate it was calculated
+                    
+                    # Add formatted USDT value for easier display
+                    trade['value_usdt'] = quote_qty
+                    
+                    formatted_trades.append(trade)
+                
+                return {"success": True, "count": len(formatted_trades), "trades": formatted_trades}
             
             elif tool_name == "get_recent_analyses":
                 if self.db is None:
