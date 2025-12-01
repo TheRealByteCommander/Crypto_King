@@ -4,13 +4,14 @@ Umfassender Guide zu allen verfügbaren Trading-Strategien.
 
 ## 📊 Verfügbare Strategien
 
-Project CypherTrade unterstützt **5 Trading-Strategien**:
+Project CypherTrade unterstützt **6 Trading-Strategien**:
 
 1. **Moving Average Crossover** - Trend-Folge Strategie
 2. **RSI** - Momentum-basierte Strategie
 3. **MACD** - Trend und Momentum Kombination
 4. **Bollinger Bands** - Volatilitäts-basierte Strategie
 5. **Combined** - Multi-Indikator Strategie
+6. **Grid Trading** - Range Trading Strategie
 
 ---
 
@@ -315,6 +316,65 @@ MACD: HOLD (No crossover)
 
 ---
 
+## 6. Grid Trading Strategy
+
+### Beschreibung
+Range-Trading-Strategie die von Preis-Oszillationen in einem definierten Bereich profitiert. Erstellt ein Raster von Preis-Levels oberhalb und unterhalb des aktuellen Preises.
+
+### Indikatoren
+- **Grid Levels**: Anzahl der Levels oberhalb und unterhalb (Standard: 5)
+- **Grid Spacing**: Abstand zwischen Levels in Prozent (Standard: 1.0%)
+
+### Signale
+
+**BUY Signal:**
+- Preis erreicht oder fällt unter ein unteres Grid-Level → Confidence 0.6-0.9
+- Preis fällt signifikant (>0.5× Grid-Spacing) → Confidence 0.7-0.85
+
+**SELL Signal:**
+- Preis erreicht oder steigt über ein oberes Grid-Level → Confidence 0.6-0.9
+- Preis steigt signifikant (>0.5× Grid-Spacing) → Confidence 0.7-0.85
+
+**HOLD:**
+- Preis innerhalb des Grid-Bereichs
+- Keine signifikante Bewegung
+
+### Confidence Level
+- Grid-Level erreicht: 0.6-0.9 (abhängig von Nähe zum Level)
+- Signifikante Bewegung: 0.7-0.85 (abhängig von Bewegungsgröße)
+
+### Best Practices
+- ✅ Gut für: Range-Bound Märkte, Seitwärtsbewegungen
+- ❌ Schlecht für: Starke Trends, Breakouts
+- 💡 Tipp: Anpassung der Grid-Spacing an Volatilität (höhere Volatilität = größere Spacing)
+
+### Konfiguration
+
+```yaml
+strategy_params:
+  grid:
+    grid_levels: 5              # Anzahl Levels oberhalb/unterhalb
+    grid_spacing_percent: 1.0    # Abstand zwischen Levels in %
+    confidence_threshold: 0.6
+```
+
+### Beispiel-Trade
+
+```
+Zeitpunkt: 10:25
+Current Price: $48,000
+Grid Spacing: 1.0% = $480
+Lower Grid Level: $47,520
+Previous Price: $47,600
+
+→ Price reached lower grid level at $47,520
+→ Signal: BUY
+→ Confidence: 0.75
+→ Reason: "Price reached lower grid level (Grid spacing: 1.0%)"
+```
+
+---
+
 ## 📊 Strategie-Vergleich
 
 | Strategie | Typ | Trade-Frequenz | Risiko | Best For |
@@ -324,6 +384,7 @@ MACD: HOLD (No crossover)
 | MACD | Trend+Momentum | Mittel | Mittel | Trends |
 | Bollinger Bands | Volatilität | Hoch | Mittel-Hoch | Volatil |
 | Combined | Multi | Niedrig | Niedrig | Alle |
+| Grid Trading | Range | Hoch | Mittel | Range-Bound |
 
 ---
 
@@ -348,8 +409,9 @@ MACD: HOLD (No crossover)
 - Häufigere Trades
 
 ### Für Seitwärtsmärkte
-**Empfehlung: RSI**
-- Oversold/Overbought funktioniert gut
+**Empfehlung: RSI oder Grid Trading**
+- RSI: Oversold/Overbought funktioniert gut
+- Grid Trading: Profitiert von Preis-Oszillationen
 - Häufige Trades
 - Range-Trading
 

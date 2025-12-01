@@ -599,6 +599,134 @@ class CombinedStrategy(TradingStrategy):
             raise
 
 
+class GridStrategy(TradingStrategy):
+    """Grid Trading Strategy - Profits from price oscillations in a range."""
+    
+    def __init__(self, grid_levels: int = 5, grid_spacing_percent: float = 1.0):
+        """
+        Initialize Grid Strategy.
+        
+        Args:
+            grid_levels: Number of grid levels above and below current price (default: 5)
+            grid_spacing_percent: Spacing between grid levels as percentage (default: 1.0%)
+        """
+        super().__init__("grid")
+        self.grid_levels = grid_levels
+        self.grid_spacing_percent = grid_spacing_percent
+    
+    def analyze(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """Analyze using Grid strategy."""
+        try:
+            # Need at least 2 data points for comparison
+            if len(df) < 2:
+                logger.warning(f"Grid Strategy: Insufficient data. Required: 2, Got: {len(df)}")
+                return {
+                    "signal": "HOLD",
+                    "reason": f"Insufficient data for Grid analysis (need 2 periods, got {len(df)})",
+                    "confidence": 0.0,
+                    "indicators": {"error": "insufficient_data"},
+                    "timestamp": str(df.iloc[-1]['timestamp']) if len(df) > 0 else ""
+                }
+            
+            # Get current and previous prices
+            last_row = df.iloc[-1]
+            prev_row = df.iloc[-2] if len(df) >= 2 else last_row
+            
+            current_price = _safe_float(last_row['close'])
+            prev_price = _safe_float(prev_row['close'])
+            
+            if current_price <= 0:
+                logger.warning(f"Grid Strategy: Invalid current price: {current_price}")
+                return {
+                    "signal": "HOLD",
+                    "reason": "Invalid price data",
+                    "confidence": 0.0,
+                    "indicators": {"error": "invalid_price"},
+                    "timestamp": str(last_row['timestamp'])
+                }
+            
+            # Calculate grid levels
+            grid_spacing = current_price * (self.grid_spacing_percent / 100.0)
+            
+            # Calculate upper and lower grid levels
+            upper_levels = []
+            lower_levels = []
+            
+            for i in range(1, self.grid_levels + 1):
+                upper_levels.append(current_price + (grid_spacing * i))
+                lower_levels.append(current_price - (grid_spacing * i))
+            
+            # Determine which grid level the price is closest to
+            signal = "HOLD"
+            reason = "Price within grid range"
+            confidence = 0.0
+            
+            # Check if price crossed a grid level
+            price_change_percent = ((current_price - prev_price) / prev_price) * 100 if prev_price > 0 else 0
+            
+            # Find nearest grid levels
+            nearest_upper = min(upper_levels, key=lambda x: abs(x - current_price)) if upper_levels else None
+            nearest_lower = min(lower_levels, key=lambda x: abs(x - current_price)) if lower_levels else None
+            
+            # Check if price is near a lower grid level (buy opportunity)
+            if nearest_lower and abs(current_price - nearest_lower) < grid_spacing * 0.3:
+                # Price is near or below a lower grid level - potential buy
+                if current_price <= nearest_lower or (prev_price > nearest_lower and current_price <= nearest_lower):
+                    signal = "BUY"
+                    reason = f"Price reached lower grid level at {nearest_lower:.6f} (Grid spacing: {self.grid_spacing_percent}%)"
+                    # Confidence based on how close to the grid level
+                    distance_ratio = abs(current_price - nearest_lower) / grid_spacing if grid_spacing > 0 else 1.0
+                    confidence = max(0.6, 0.9 - distance_ratio * 0.3)
+            
+            # Check if price is near an upper grid level (sell opportunity)
+            elif nearest_upper and abs(current_price - nearest_upper) < grid_spacing * 0.3:
+                # Price is near or above an upper grid level - potential sell
+                if current_price >= nearest_upper or (prev_price < nearest_upper and current_price >= nearest_upper):
+                    signal = "SELL"
+                    reason = f"Price reached upper grid level at {nearest_upper:.6f} (Grid spacing: {self.grid_spacing_percent}%)"
+                    # Confidence based on how close to the grid level
+                    distance_ratio = abs(current_price - nearest_upper) / grid_spacing if grid_spacing > 0 else 1.0
+                    confidence = max(0.6, 0.9 - distance_ratio * 0.3)
+            
+            # Additional signals based on price movement
+            # If price dropped significantly, it's a buy opportunity
+            if price_change_percent < -self.grid_spacing_percent * 0.5:
+                signal = "BUY"
+                reason = f"Price dropped {abs(price_change_percent):.2f}% - Grid buy opportunity (Grid spacing: {self.grid_spacing_percent}%)"
+                confidence = min(0.85, 0.7 + abs(price_change_percent) / self.grid_spacing_percent * 0.1)
+            
+            # If price rose significantly, it's a sell opportunity
+            elif price_change_percent > self.grid_spacing_percent * 0.5:
+                signal = "SELL"
+                reason = f"Price rose {price_change_percent:.2f}% - Grid sell opportunity (Grid spacing: {self.grid_spacing_percent}%)"
+                confidence = min(0.85, 0.7 + abs(price_change_percent) / self.grid_spacing_percent * 0.1)
+            
+            result = {
+                "signal": signal,
+                "reason": reason,
+                "confidence": confidence,
+                "indicators": {
+                    "current_price": current_price,
+                    "prev_price": prev_price,
+                    "price_change_percent": round(price_change_percent, 2),
+                    "grid_spacing_percent": self.grid_spacing_percent,
+                    "grid_levels": self.grid_levels,
+                    "upper_levels": [round(level, 6) for level in upper_levels[:3]],  # Show first 3
+                    "lower_levels": [round(level, 6) for level in lower_levels[:3]],  # Show first 3
+                    "nearest_upper": round(nearest_upper, 6) if nearest_upper else None,
+                    "nearest_lower": round(nearest_lower, 6) if nearest_lower else None
+                },
+                "timestamp": str(last_row['timestamp'])
+            }
+            
+            logger.info(f"Grid Strategy: {signal} - {reason} (Confidence: {confidence:.2f}, Price: {current_price:.6f})")
+            return result
+        
+        except Exception as e:
+            logger.error(f"Error in Grid strategy analysis: {e}", exc_info=True)
+            raise
+
+
 def get_strategy(strategy_name: str) -> TradingStrategy:
     """Factory function to get strategy instance."""
     strategies = {
@@ -606,7 +734,8 @@ def get_strategy(strategy_name: str) -> TradingStrategy:
         "rsi": RSIStrategy(),
         "macd": MACDStrategy(),
         "bollinger_bands": BollingerBandsStrategy(),
-        "combined": CombinedStrategy()
+        "combined": CombinedStrategy(),
+        "grid": GridStrategy()
     }
     
     if strategy_name not in strategies:
@@ -622,5 +751,6 @@ def get_available_strategies() -> Dict[str, str]:
         "rsi": "RSI - Relative Strength Index",
         "macd": "MACD - Moving Average Convergence Divergence",
         "bollinger_bands": "Bollinger Bands - Volatility Strategy",
-        "combined": "Combined Strategy (MA + RSI + MACD)"
+        "combined": "Combined Strategy (MA + RSI + MACD)",
+        "grid": "Grid Trading - Range Trading Strategy"
     }

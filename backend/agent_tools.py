@@ -231,7 +231,7 @@ class AgentTools:
                             },
                             "strategy": {
                                 "type": "string",
-                                "enum": ["ma_crossover", "rsi", "macd", "bollinger_bands", "combined"],
+                                "enum": ["ma_crossover", "rsi", "macd", "bollinger_bands", "combined", "grid"],
                                 "description": "Trading strategy to use"
                             },
                             "timeframe": {

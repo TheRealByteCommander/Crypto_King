@@ -22,7 +22,8 @@ const BotControl = ({ botsStatus = {}, onStatusChange }) => {
     "rsi": "RSI - Relative Strength Index",
     "macd": "MACD - Moving Average Convergence Divergence",
     "bollinger_bands": "Bollinger Bands - Volatility Strategy",
-    "combined": "Combined Strategy (MA + RSI + MACD)"
+    "combined": "Combined Strategy (MA + RSI + MACD)",
+    "grid": "Grid Trading - Range Trading Strategy"
   });
 
   // Convert botsStatus to array for easier rendering

@@ -34,7 +34,7 @@ http://localhost:3000
 - **CypherTrade** - Trade Execution Agent
 
 ### 💹 Trading Features
-- **5 Trading-Strategien**: MA Crossover, RSI, MACD, Bollinger Bands, Combined
+- **6 Trading-Strategien**: MA Crossover, RSI, MACD, Bollinger Bands, Combined, Grid Trading
 - **Flexible Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
 - **Trading Modes**: SPOT, MARGIN, FUTURES (Short Trading unterstützt)
 - **Automatisches Risikomanagement**: Stop-Loss bei -2%, Take-Profit bei 2-5%
@@ -92,7 +92,7 @@ http://localhost:3000
 |-------|--------------|
 | [QUICK_START.md](QUICK_START.md) | ⚡ Schnellstart in 5 Minuten |
 | [INSTALLATION.md](INSTALLATION.md) | 📦 Ausführliche Installations-Anleitung |
-| [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md) | 📊 Alle 5 Trading-Strategien im Detail |
+| [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md) | 📊 Alle 6 Trading-Strategien im Detail |
 | [TRADING-MODE-ANLEITUNG.md](TRADING-MODE-ANLEITUNG.md) | 💹 SPOT, MARGIN & FUTURES Trading |
 | [RISK_MANAGEMENT.md](RISK_MANAGEMENT.md) | 🛡️ Stop-Loss & Take-Profit Risikomanagement |
 | [EXECUTION_ANALYTICS.md](EXECUTION_ANALYTICS.md) | ⏱️ Execution Delay & Slippage Tracking |
@@ -213,7 +213,7 @@ http://localhost:3000
 
 ### 2. Bot starten
 
-1. Strategie wählen: `MA Crossover`, `RSI`, `MACD`, `Bollinger Bands` oder `Combined`
+1. Strategie wählen: `MA Crossover`, `RSI`, `MACD`, `Bollinger Bands`, `Combined` oder `Grid Trading`
 2. Symbol: `BTCUSDT` (oder jedes andere Binance-Paar)
 3. Amount: `100` USDT
 4. Timeframe: `5m` (oder 1m, 15m, 30m, 1h, 4h, 1d, etc.)
@@ -234,13 +234,14 @@ Klick: **"Stop Trading Bot"**
 
 ## 📊 Trading Strategien
 
-### 5 Verfügbare Strategien
+### 6 Verfügbare Strategien
 
 1. **Moving Average Crossover** - Trend-Folge (SMA 20/50)
 2. **RSI** - Relative Strength Index (Momentum)
 3. **MACD** - Moving Average Convergence Divergence
 4. **Bollinger Bands** - Volatilitäts-basiert
 5. **Combined** - Multi-Indikator (MA + RSI + MACD)
+6. **Grid Trading** - Range Trading (Profitiert von Preis-Oszillationen)
 
 ### Strategie-Auswahl
 
@@ -251,6 +252,7 @@ Wählen Sie im Dashboard aus dem Dropdown-Menü:
 - **MACD**: Trend + Momentum Kombination
 - **Bollinger Bands**: Volatilitäts-Trading
 - **Combined**: Konsens aus 3 Indikatoren (empfohlen für Anfänger)
+- **Grid Trading**: Ideal für Range-Bound Märkte, profitiert von Preis-Oszillationen
 
 **Verfügbare Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
 
@@ -405,6 +407,7 @@ class MyStrategy(TradingStrategy):
 - [x] RSI Strategie ✅
 - [x] MACD Strategie ✅
 - [x] Bollinger Bands ✅
+- [x] Grid Trading Strategie ✅
 - [x] Combined Multi-Indikator Strategie ✅
 - [x] Trading Modes (SPOT, MARGIN, FUTURES) ✅
 - [x] Memory & Learning System ✅
