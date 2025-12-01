@@ -1015,17 +1015,41 @@ class TradingBot:
             logger.error(f"Bot {self.bot_id}: Error learning from closed position: {e}", exc_info=True)
     
     async def _get_total_spent(self) -> float:
-        """Calculate total amount spent (BUY trades) for this bot."""
+        """
+        Calculate current net amount \"in use\" for this bot.
+        
+        Hintergrund:
+        - Bisher wurde die Summe ALLER BUY-Trades verwendet.
+          Nach einem vollständigen Buy+Sell-Zyklus war das Budget damit „verbraucht\"
+          und der Bot konnte keine neuen Käufe mehr ausführen.
+        - Jetzt wird das NETTO-Exposure berechnet: BUY-QuoteQty minus SELL-QuoteQty.
+          Sobald eine Position vollständig geschlossen ist (BUY und SELL ausgeglichen),
+          steht das volle Budget wieder zur Verfügung und der Bot kann weitertraden.
+        """
         try:
-            # Sum all BUY trades for this bot
             pipeline = [
-                {"$match": {"bot_id": self.bot_id, "side": "BUY"}},
-                {"$group": {"_id": None, "total": {"$sum": "$quote_qty"}}}
+                {"$match": {"bot_id": self.bot_id}},
+                {
+                    "$group": {
+                        "_id": "$side",
+                        "total": {"$sum": "$quote_qty"}
+                    }
+                }
             ]
-            result = await self.db.trades.aggregate(pipeline).to_list(length=1)
-            if result and len(result) > 0:
-                return float(result[0].get("total", 0.0))
-            return 0.0
+            results = await self.db.trades.aggregate(pipeline).to_list(length=10)
+            
+            total_buy = 0.0
+            total_sell = 0.0
+            for row in results:
+                side = row.get("_id")
+                total = float(row.get("total", 0.0) or 0.0)
+                if side == "BUY":
+                    total_buy += total
+                elif side == "SELL":
+                    total_sell += total
+            
+            net_spent = max(0.0, total_buy - total_sell)
+            return net_spent
         except Exception as e:
             logger.warning(f"Bot {self.bot_id}: Error calculating total spent: {e}")
             return 0.0
