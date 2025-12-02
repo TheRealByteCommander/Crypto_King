@@ -160,14 +160,46 @@ class BinanceClientWrapper:
             trading_mode: 'SPOT', 'MARGIN', or 'FUTURES'
         """
         try:
-            logger.info(f"Executing {side} order: {quantity} {symbol} ({order_type}) - Mode: {trading_mode}")
+            # Format quantity to avoid scientific notation and ensure valid format for Binance
+            # Binance requires: '^([0-9]{1,20})(\.[0-9]{1,20})?$'
+            # First, adjust quantity to lot size to ensure it's valid
+            quantity = self.adjust_quantity_to_lot_size(symbol, quantity)
+            
+            # Validate quantity is positive
+            if quantity <= 0:
+                raise ValueError(f"Quantity must be positive, got: {quantity}")
+            
+            # Format as string to avoid scientific notation
+            # Use format that ensures no scientific notation (max 20 decimal places)
+            # The Binance library accepts float but converts to string internally
+            # We need to ensure the string representation is valid (no scientific notation)
+            quantity_str = f"{quantity:.20f}".rstrip('0').rstrip('.')
+            # If empty after stripping (very small number), use minimum format
+            if not quantity_str or quantity_str == '.':
+                quantity_str = f"{quantity:.20f}"
+            
+            # Convert back to float (Binance library will convert to string internally)
+            # But we ensure the string representation is valid
+            quantity_float = float(quantity_str)
+            
+            # Double-check: ensure the string representation doesn't use scientific notation
+            # This is critical for Binance API validation
+            if 'e' in quantity_str.lower() or 'E' in quantity_str:
+                # If scientific notation detected, reformat
+                quantity_float = float(quantity_str)
+                quantity_str = f"{quantity_float:.20f}".rstrip('0').rstrip('.')
+                if not quantity_str or quantity_str == '.':
+                    quantity_str = f"{quantity_float:.20f}"
+                quantity_float = float(quantity_str)
+            
+            logger.info(f"Executing {side} order: {quantity_float} (formatted: {quantity_str}) {symbol} ({order_type}) - Mode: {trading_mode}")
             
             if trading_mode == "SPOT":
                 order = self.client.create_order(
                     symbol=symbol,
                     side=side,
                     type=order_type,
-                    quantity=quantity
+                    quantity=quantity_float
                 )
             elif trading_mode == "MARGIN":
                 # Margin trading - allows short positions
@@ -179,7 +211,7 @@ class BinanceClientWrapper:
                     symbol=symbol,
                     side=side,
                     type=order_type,
-                    quantity=quantity
+                    quantity=quantity_float
                 )
             elif trading_mode == "FUTURES":
                 # Futures trading - supports both long and short positions
@@ -195,7 +227,7 @@ class BinanceClientWrapper:
                     symbol=symbol,
                     side=side,
                     type=order_type,
-                    quantity=quantity,
+                    quantity=quantity_float,
                     positionSide=position_side
                 )
             else:
