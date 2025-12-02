@@ -86,7 +86,11 @@ class CoinAnalyzer:
                     strategy_results = []
                     for tf, df in market_data.items():
                         try:
-                            signal, confidence, indicators = strategy.analyze(df)
+                            # strategy.analyze() gibt ein Dictionary zurück, nicht ein Tuple
+                            result = strategy.analyze(df)
+                            signal = result.get("signal", "HOLD")
+                            confidence = result.get("confidence", 0.0)
+                            indicators = result.get("indicators", {})
                             
                             # Bewerte Signal
                             signal_score = 0.0
