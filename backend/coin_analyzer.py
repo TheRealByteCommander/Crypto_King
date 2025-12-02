@@ -158,12 +158,25 @@ class CoinAnalyzer:
             if self.news_fetcher:
                 try:
                     # Suche nach News für diesen Coin
-                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                    # Extrahiere Base-Asset (z.B. "BTCUSDT" -> "BTC")
+                    base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "").replace("BNB", "")
+                    
+                    # Versuche zuerst mit Symbol-Filter (spezifische News)
                     news_articles = await self.news_fetcher.fetch_news(
                         symbols=[base_asset],
                         limit_per_source=3,
                         max_total=10
                     )
+                    
+                    # Falls keine spezifischen News gefunden, hole allgemeine News (ohne Symbol-Filter)
+                    # Dies ist besonders wichtig für kleinere Coins
+                    if len(news_articles) == 0:
+                        logger.debug(f"No specific news found for {base_asset}, fetching general crypto news")
+                        news_articles = await self.news_fetcher.fetch_news(
+                            symbols=None,  # Kein Symbol-Filter = allgemeine News
+                            limit_per_source=2,
+                            max_total=5
+                        )
                     
                     # Bewerte News
                     for article in news_articles:
