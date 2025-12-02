@@ -667,22 +667,54 @@ async def get_portfolio():
 
 @api_router.get("/stats")
 async def get_statistics():
-    """Get overall statistics with learning insights."""
+    """Get statistics with learning insights (overall + last 24h)."""
     try:
+        # Overall counts
         total_trades = await db.trades.count_documents({})
         total_analyses = await db.analyses.count_documents({})
         total_logs = await db.agent_logs.count_documents({})
         
+        # Last 24h window
+        from datetime import timedelta
+        now_utc = datetime.now(timezone.utc)
+        cutoff_24h = now_utc - timedelta(hours=24)
+        cutoff_24h_iso = cutoff_24h.isoformat()
+        
+        # Latest trades (overall, for history view)
         # Get latest trades
         recent_trades = await db.trades.find({}, {"_id": 0}).sort("timestamp", -1).to_list(10)
         
-        # Calculate P&L
+        # Calculate overall P&L (all time)
         buy_trades = await db.trades.find({"side": "BUY"}, {"_id": 0}).to_list(1000)
         sell_trades = await db.trades.find({"side": "SELL"}, {"_id": 0}).to_list(1000)
         
         total_bought = sum(float(t.get("quote_qty", 0)) for t in buy_trades)
         total_sold = sum(float(t.get("quote_qty", 0)) for t in sell_trades)
         profit_loss = total_sold - total_bought
+
+        # --- Last 24h statistics (für Dashboard-Anzeigen) ---
+        trades_24h_filter = {"timestamp": {"$gte": cutoff_24h_iso}}
+
+        total_trades_24h = await db.trades.count_documents(trades_24h_filter)
+        total_analyses_24h = await db.analyses.count_documents(
+            {"timestamp": {"$gte": cutoff_24h_iso}}
+        )
+        total_logs_24h = await db.agent_logs.count_documents(
+            {"timestamp": {"$gte": cutoff_24h_iso}}
+        )
+
+        buy_trades_24h = await db.trades.find(
+            {"side": "BUY", "timestamp": {"$gte": cutoff_24h_iso}},
+            {"_id": 0}
+        ).to_list(1000)
+        sell_trades_24h = await db.trades.find(
+            {"side": "SELL", "timestamp": {"$gte": cutoff_24h_iso}},
+            {"_id": 0}
+        ).to_list(1000)
+
+        total_bought_24h = sum(float(t.get("quote_qty", 0)) for t in buy_trades_24h)
+        total_sold_24h = sum(float(t.get("quote_qty", 0)) for t in sell_trades_24h)
+        profit_loss_24h = total_sold_24h - total_bought_24h
         
         # Get memory stats
         memory_stats = {
@@ -692,12 +724,25 @@ async def get_statistics():
         }
         
         return {
+            # Overall (all time)
             "total_trades": total_trades,
             "total_analyses": total_analyses,
             "total_logs": total_logs,
             "profit_loss_usdt": round(profit_loss, 2),
             "total_bought_usdt": round(total_bought, 2),
             "total_sold_usdt": round(total_sold, 2),
+            # Last 24h (für Dashboard-Anzeigen)
+            "total_trades_24h": total_trades_24h,
+            "total_analyses_24h": total_analyses_24h,
+            "total_logs_24h": total_logs_24h,
+            "profit_loss_usdt_24h": round(profit_loss_24h, 2),
+            "total_bought_usdt_24h": round(total_bought_24h, 2),
+            "total_sold_usdt_24h": round(total_sold_24h, 2),
+            "stats_window": {
+                "type": "last_24h",
+                "cutoff_utc": cutoff_24h_iso,
+                "now_utc": now_utc.isoformat()
+            },
             "recent_trades": recent_trades,
             "memory_stats": memory_stats
         }

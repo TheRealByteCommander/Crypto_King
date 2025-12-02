@@ -212,32 +212,48 @@ const Dashboard = () => {
 
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8 pb-20 md:pb-8">
-          {/* Stats Overview */}
+          {/* Stats Overview (letzte 24h) */}
           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-8">
             <StatsCard
-              title="Profit/Loss"
-              value={stats ? `$${stats.profit_loss_usdt}` : "$0.00"}
-              icon={stats && stats.profit_loss_usdt >= 0 ? TrendingUp : TrendingDown}
-              color={stats && stats.profit_loss_usdt >= 0 ? "green" : "red"}
+              title="Profit/Loss (24h)"
+              value={stats ? `$${stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt}` : "$0.00"}
+              icon={
+                stats && (stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt) >= 0
+                  ? TrendingUp
+                  : TrendingDown
+              }
+              color={
+                stats && (stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt) >= 0
+                  ? "green"
+                  : "red"
+              }
               testId="profit-loss-card"
             />
             <StatsCard
-              title="Total Trades"
-              value={stats ? stats.total_trades : 0}
+              title="Trades (24h)"
+              value={stats ? (stats.total_trades_24h ?? stats.total_trades) : 0}
               icon={Activity}
               color="blue"
               testId="total-trades-card"
             />
             <StatsCard
-              title="Total Bought"
-              value={stats ? `$${stats.total_bought_usdt}` : "$0.00"}
+              title="Bought (24h)"
+              value={
+                stats
+                  ? `$${stats.total_bought_usdt_24h ?? stats.total_bought_usdt}`
+                  : "$0.00"
+              }
               icon={DollarSign}
               color="cyan"
               testId="total-bought-card"
             />
             <StatsCard
-              title="Total Sold"
-              value={stats ? `$${stats.total_sold_usdt}` : "$0.00"}
+              title="Sold (24h)"
+              value={
+                stats
+                  ? `$${stats.total_sold_usdt_24h ?? stats.total_sold_usdt}`
+                  : "$0.00"
+              }
               icon={DollarSign}
               color="purple"
               testId="total-sold-card"
