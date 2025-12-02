@@ -30,9 +30,69 @@ if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
 fi
 
 echo -e "${YELLOW}Step 1: Git Pull (neueste Änderungen)${NC}"
-git pull origin main || {
-  echo -e "${RED}[WARN] git pull fehlgeschlagen. Bitte manuell prüfen.${NC}"
-}
+
+# Prüfe Git-Status und Flag für gestashte Änderungen
+HAD_LOCAL_CHANGES=0
+GIT_STATUS=$(git status --porcelain 2>/dev/null || echo "")
+if [ -n "$GIT_STATUS" ]; then
+  HAD_LOCAL_CHANGES=1
+  echo -e "${YELLOW}[WARN] Lokale Änderungen gefunden. Diese werden gestasht.${NC}"
+  git stash push -m "Auto-stash vor Update $(date +%Y-%m-%d_%H:%M:%S)" || {
+    echo -e "${RED}[ERROR] Stash fehlgeschlagen. Bitte manuell prüfen.${NC}"
+    exit 1
+  }
+  echo -e "${GREEN}[OK] Lokale Änderungen wurden gestasht.${NC}"
+fi
+
+# Prüfe ob wir auf dem richtigen Branch sind
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  echo -e "${YELLOW}[WARN] Aktueller Branch: $CURRENT_BRANCH (erwartet: main)${NC}"
+  echo -e "${YELLOW}[INFO] Wechsle zu main...${NC}"
+  git checkout main || {
+    echo -e "${RED}[ERROR] Branch-Wechsel fehlgeschlagen.${NC}"
+    exit 1
+  }
+fi
+
+# Git Pull mit Merge-Konflikt-Behandlung
+echo "[INFO] Hole neueste Änderungen von origin/main..."
+if ! git pull origin main; then
+  echo -e "${YELLOW}[WARN] git pull hatte Probleme. Versuche Merge-Konflikt zu lösen...${NC}"
+  
+  # Prüfe ob es einen laufenden Merge gibt
+  if [ -f ".git/MERGE_HEAD" ]; then
+    echo "[INFO] Laufender Merge erkannt. Breche Merge ab..."
+    git merge --abort 2>/dev/null || true
+  fi
+  
+  # Versuche Reset auf Remote-State (ACHTUNG: überschreibt lokale Änderungen)
+  echo "[INFO] Setze auf Remote-State zurück (origin/main)..."
+  git fetch origin main || {
+    echo -e "${RED}[ERROR] git fetch fehlgeschlagen.${NC}"
+    exit 1
+  }
+  
+  git reset --hard origin/main || {
+    echo -e "${RED}[ERROR] git reset fehlgeschlagen.${NC}"
+    echo ""
+    echo -e "${RED}=== MANUELLE LÖSUNG ERFORDERLICH ===${NC}"
+    echo "Bitte auf dem Server manuell ausführen:"
+    echo "  cd /app"
+    echo "  git status"
+    echo "  git stash"
+    echo "  git pull origin main"
+    echo "  # Falls weiterhin Probleme:"
+    echo "  git reset --hard origin/main"
+    exit 1
+  }
+  
+  echo -e "${GREEN}[OK] Repository erfolgreich auf origin/main zurückgesetzt.${NC}"
+fi
+
+echo -e "${GREEN}[OK] Git Pull erfolgreich abgeschlossen.${NC}"
+LATEST_COMMIT=$(git log -1 --oneline 2>/dev/null || echo "unknown")
+echo "[INFO] Neuester Commit: $LATEST_COMMIT"
 
 echo ""
 echo -e "${YELLOW}Step 2: Python Dependencies aktualisieren (Backend)${NC}"
@@ -128,4 +188,11 @@ echo "  - Für Produktions-Builds des Frontends gibt es zusätzliche Skripte wie
 echo "      rebuild-frontend-now.sh, reload-frontend-now.sh"
 echo "  - Nach dem Update Browser-Cache ggf. mit Strg+Shift+R leeren."
 echo ""
+if [ "$HAD_LOCAL_CHANGES" = "1" ]; then
+  echo -e "${YELLOW}⚠ WICHTIG: Lokale Änderungen wurden gestasht!${NC}"
+  echo "  Falls du diese Änderungen brauchst, führe aus:"
+  echo "    git stash list    # Zeige alle Stashes"
+  echo "    git stash pop     # Stelle letzte Änderungen wieder her"
+  echo ""
+fi
 
