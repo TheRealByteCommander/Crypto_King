@@ -123,8 +123,17 @@ class AutonomousManager:
                 news_summary += "\n"
             
             # Sende direkt an CypherMind
-            cyphermind = self.agent_manager.get_agent("CypherMind")
-            user_proxy = self.agent_manager.get_agent("UserProxy")
+            try:
+                cyphermind = self.agent_manager.get_agent("CypherMind")
+            except ValueError as e:
+                logger.error(f"CypherMind agent not found: {e}. Available agents: {list(self.agent_manager.agents.keys())}")
+                return
+            
+            try:
+                user_proxy = self.agent_manager.get_agent("UserProxy")
+            except ValueError as e:
+                logger.error(f"UserProxy agent not found: {e}. Available agents: {list(self.agent_manager.agents.keys())}")
+                return
             
             message = (
                 f"{news_summary}\n"
@@ -223,6 +232,16 @@ class AutonomousManager:
     async def _activate_cyphermind_for_analysis(self):
         """Aktiviert CypherMind für autonome Coin-Analyse und Bot-Start."""
         try:
+            # Stelle sicher, dass Agents initialisiert sind
+            if not self.agent_manager.agents:
+                logger.error("Agents not initialized yet. Cannot activate CypherMind.")
+                await self.agent_manager.log_agent_message(
+                    "AutonomousManager",
+                    "FEHLER: Agents noch nicht initialisiert. Warte auf System-Start...",
+                    "error"
+                )
+                return
+            
             # Stelle sicher, dass Binance Client vorhanden ist
             if self.binance_client is None:
                 try:
@@ -273,8 +292,27 @@ class AutonomousManager:
             )
             
             # Verwende initiate_chat statt send() für bessere Tool-Aufrufe
-            cyphermind = self.agent_manager.get_agent("CypherMind")
-            user_proxy = self.agent_manager.get_agent("UserProxy")
+            try:
+                cyphermind = self.agent_manager.get_agent("CypherMind")
+            except ValueError as e:
+                logger.error(f"CypherMind agent not found: {e}. Available agents: {list(self.agent_manager.agents.keys())}")
+                await self.agent_manager.log_agent_message(
+                    "AutonomousManager",
+                    f"FEHLER: CypherMind Agent nicht gefunden. Verfügbare Agents: {list(self.agent_manager.agents.keys())}",
+                    "error"
+                )
+                return
+            
+            try:
+                user_proxy = self.agent_manager.get_agent("UserProxy")
+            except ValueError as e:
+                logger.error(f"UserProxy agent not found: {e}. Available agents: {list(self.agent_manager.agents.keys())}")
+                await self.agent_manager.log_agent_message(
+                    "AutonomousManager",
+                    f"FEHLER: UserProxy Agent nicht gefunden. Verfügbare Agents: {list(self.agent_manager.agents.keys())}",
+                    "error"
+                )
+                return
             
             try:
                 # Logge Aktivierung

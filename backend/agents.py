@@ -315,10 +315,39 @@ class AgentManager:
             logger.error(f"Error logging agent message: {e}")
     
     def get_agent(self, agent_name: str):
-        """Get a specific agent by name."""
-        if agent_name not in self.agents:
-            raise ValueError(f"Agent {agent_name} not found")
-        return self.agents[agent_name]
+        """Get a specific agent by name (supports both name and key)."""
+        # Normalize agent name to lowercase key
+        agent_key = agent_name.lower()
+        
+        # Handle special cases
+        if agent_name == "UserProxy":
+            agent_key = "user_proxy"
+        elif agent_name == "CypherMind":
+            agent_key = "cyphermind"
+        elif agent_name == "CypherTrade":
+            agent_key = "cyphertrade"
+        elif agent_name == "NexusChat":
+            agent_key = "nexuschat"
+        
+        # Try direct lookup first
+        if agent_name in self.agents:
+            return self.agents[agent_name]
+        
+        # Try normalized key
+        if agent_key in self.agents:
+            return self.agents[agent_key]
+        
+        # Try case-insensitive search
+        for key in self.agents.keys():
+            if key.lower() == agent_name.lower():
+                return self.agents[key]
+        
+        # If still not found, check agent names
+        for key, agent in self.agents.items():
+            if hasattr(agent, 'name') and agent.name == agent_name:
+                return agent
+        
+        raise ValueError(f"Agent {agent_name} not found. Available agents: {list(self.agents.keys())}")
     
     async def share_news_with_agents(self, articles: List[Dict[str, Any]], 
                                      target_agents: List[str] = None,
