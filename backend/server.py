@@ -967,35 +967,35 @@ async def startup_event():
     
     asyncio.create_task(broadcast_updates())
     
-        # Starte Autonomous Manager
-        global autonomous_manager
-        try:
-            # Versuche Binance-Client vom ersten Bot zu holen (falls vorhanden)
-            binance_client = None
-            all_bots = bot_manager.get_all_bots()
-            for bot in all_bots.values():
-                if bot.binance_client:
-                    binance_client = bot.binance_client
-                    break
-            
-            # Falls kein Bot läuft, erstelle einen temporären Binance Client
-            if binance_client is None:
-                try:
-                    from binance_client import BinanceClientWrapper
-                    logger.info("No running bot found, creating temporary Binance client for Autonomous Manager...")
-                    binance_client = BinanceClientWrapper()
-                    logger.info("Temporary Binance client created successfully")
-                except Exception as client_error:
-                    logger.warning(f"Could not create temporary Binance client: {client_error}. Autonomous Manager will create one when needed.")
-            
-            autonomous_manager = AutonomousManager(
-                agent_manager=agent_manager,
-                bot_manager=bot_manager,
-                db=db,
-                binance_client=binance_client
-            )
-            await autonomous_manager.start()
-            logger.info("Autonomous Manager started - CypherMind arbeitet jetzt autonom")
+    # Starte Autonomous Manager
+    global autonomous_manager
+    try:
+        # Versuche Binance-Client vom ersten Bot zu holen (falls vorhanden)
+        binance_client = None
+        all_bots = bot_manager.get_all_bots()
+        for bot in all_bots.values():
+            if bot.binance_client:
+                binance_client = bot.binance_client
+                break
+        
+        # Falls kein Bot läuft, erstelle einen temporären Binance Client
+        if binance_client is None:
+            try:
+                from binance_client import BinanceClientWrapper
+                logger.info("No running bot found, creating temporary Binance client for Autonomous Manager...")
+                binance_client = BinanceClientWrapper()
+                logger.info("Temporary Binance client created successfully")
+            except Exception as client_error:
+                logger.warning(f"Could not create temporary Binance client: {client_error}. Autonomous Manager will create one when needed.")
+        
+        autonomous_manager = AutonomousManager(
+            agent_manager=agent_manager,
+            bot_manager=bot_manager,
+            db=db,
+            binance_client=binance_client
+        )
+        await autonomous_manager.start()
+        logger.info("Autonomous Manager started - CypherMind arbeitet jetzt autonom")
         
         # Initialize Trading Pairs Cache
         try:
@@ -1004,39 +1004,38 @@ async def startup_event():
             logger.info("Trading Pairs Cache started - wird alle 2 Stunden aktualisiert")
         except Exception as e:
             logger.warning(f"Could not start Trading Pairs Cache: {e}")
+    except Exception as e:
+        logger.error(f"Error starting Autonomous Manager: {e}", exc_info=True)
+        logger.warning("Autonomous Manager will retry when a bot starts or when manually triggered.")
+    
+    # Update Binance-Client wenn ein Bot startet
+    async def update_autonomous_manager_binance_client():
+        """Aktualisiert den Binance-Client im AutonomousManager und Trading Pairs Cache wenn ein Bot startet."""
+        if autonomous_manager and not autonomous_manager.binance_client:
+            all_bots = bot_manager.get_all_bots()
+            for bot in all_bots.values():
+                if bot.binance_client:
+                    autonomous_manager.binance_client = bot.binance_client
+                    logger.info("Autonomous Manager Binance client updated")
+                    break
         
-        # Update Binance-Client wenn ein Bot startet
-        async def update_autonomous_manager_binance_client():
-            """Aktualisiert den Binance-Client im AutonomousManager und Trading Pairs Cache wenn ein Bot startet."""
-            if autonomous_manager and not autonomous_manager.binance_client:
+        # Update Trading Pairs Cache Binance client
+        try:
+            trading_pairs_cache = get_trading_pairs_cache()
+            if trading_pairs_cache and not trading_pairs_cache.binance_client:
                 all_bots = bot_manager.get_all_bots()
                 for bot in all_bots.values():
                     if bot.binance_client:
-                        autonomous_manager.binance_client = bot.binance_client
-                        logger.info("Autonomous Manager Binance client updated")
+                        trading_pairs_cache.binance_client = bot.binance_client
+                        if not trading_pairs_cache.update_task:
+                            await trading_pairs_cache.start()
+                        logger.info("Trading Pairs Cache Binance client updated")
                         break
-            
-            # Update Trading Pairs Cache Binance client
-            try:
-                trading_pairs_cache = get_trading_pairs_cache()
-                if trading_pairs_cache and not trading_pairs_cache.binance_client:
-                    all_bots = bot_manager.get_all_bots()
-                    for bot in all_bots.values():
-                        if bot.binance_client:
-                            trading_pairs_cache.binance_client = bot.binance_client
-                            if not trading_pairs_cache.update_task:
-                                await trading_pairs_cache.start()
-                            logger.info("Trading Pairs Cache Binance client updated")
-                            break
-            except Exception as e:
-                logger.warning(f"Could not update Trading Pairs Cache: {e}")
-        
-        # Speichere Update-Funktion für später
-        bot_manager._update_autonomous_manager = update_autonomous_manager_binance_client
-        
-    except Exception as e:
-        logger.error(f"Could not start Autonomous Manager: {e}", exc_info=True)
-        logger.warning("Autonomous Manager will retry when a bot starts or when manually triggered.")
+        except Exception as e:
+            logger.warning(f"Could not update Trading Pairs Cache: {e}")
+    
+    # Speichere Update-Funktion für später
+    bot_manager._update_autonomous_manager = update_autonomous_manager_binance_client
     
     # Load trading knowledge for all agents
     try:
