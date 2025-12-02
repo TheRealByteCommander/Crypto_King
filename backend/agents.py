@@ -237,30 +237,16 @@ class AgentManager:
         
         # User Proxy for orchestration
         # UserProxy executes tools on behalf of agents
-        # Register function map for tool execution
-        function_map = {}
-        
-        # Register all CypherMind tools
-        cyphermind_tools = self.agent_tools.get_cyphermind_tools()
-        for tool in cyphermind_tools:
-            if "function" in tool and "name" in tool["function"]:
-                tool_name = tool["function"]["name"]
-                # Create a closure to capture tool_name and agent_tools
-                def make_tool_executor(name, tools, agent):
-                    async def executor(params):
-                        return await tools.execute_tool(name, params, agent)
-                    return executor
-                function_map[tool_name] = make_tool_executor(tool_name, self.agent_tools, "CypherMind")
-        
+        # Note: Autogen handles function calling through llm_config["functions"]
+        # Tools are executed via the execute_tool method when agents request them
         self.agents["user_proxy"] = autogen.UserProxyAgent(
             name="UserProxy",
             system_message="Facilitate communication between agents and user.",
             human_input_mode="NEVER",
             max_consecutive_auto_reply=10,
             code_execution_config=False,
-            function_map=function_map if function_map else None,
         )
-        logger.info(f"✓ UserProxy initialized with {len(function_map)} registered functions")
+        logger.info("✓ UserProxy initialized")
         
         logger.info("=" * 60)
         logger.info("All agents initialized successfully from YAML configs")
