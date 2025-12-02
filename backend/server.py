@@ -967,25 +967,35 @@ async def startup_event():
     
     asyncio.create_task(broadcast_updates())
     
-    # Starte Autonomous Manager (wird Binance-Client später initialisieren)
-    global autonomous_manager
-    try:
-        # Versuche Binance-Client vom ersten Bot zu holen (falls vorhanden)
-        binance_client = None
-        all_bots = bot_manager.get_all_bots()
-        for bot in all_bots.values():
-            if bot.binance_client:
-                binance_client = bot.binance_client
-                break
-        
-        autonomous_manager = AutonomousManager(
-            agent_manager=agent_manager,
-            bot_manager=bot_manager,
-            db=db,
-            binance_client=binance_client
-        )
-        await autonomous_manager.start()
-        logger.info("Autonomous Manager started - CypherMind arbeitet jetzt autonom")
+        # Starte Autonomous Manager
+        global autonomous_manager
+        try:
+            # Versuche Binance-Client vom ersten Bot zu holen (falls vorhanden)
+            binance_client = None
+            all_bots = bot_manager.get_all_bots()
+            for bot in all_bots.values():
+                if bot.binance_client:
+                    binance_client = bot.binance_client
+                    break
+            
+            # Falls kein Bot läuft, erstelle einen temporären Binance Client
+            if binance_client is None:
+                try:
+                    from binance_client import BinanceClientWrapper
+                    logger.info("No running bot found, creating temporary Binance client for Autonomous Manager...")
+                    binance_client = BinanceClientWrapper()
+                    logger.info("Temporary Binance client created successfully")
+                except Exception as client_error:
+                    logger.warning(f"Could not create temporary Binance client: {client_error}. Autonomous Manager will create one when needed.")
+            
+            autonomous_manager = AutonomousManager(
+                agent_manager=agent_manager,
+                bot_manager=bot_manager,
+                db=db,
+                binance_client=binance_client
+            )
+            await autonomous_manager.start()
+            logger.info("Autonomous Manager started - CypherMind arbeitet jetzt autonom")
         
         # Initialize Trading Pairs Cache
         try:
@@ -1025,7 +1035,8 @@ async def startup_event():
         bot_manager._update_autonomous_manager = update_autonomous_manager_binance_client
         
     except Exception as e:
-        logger.warning(f"Could not start Autonomous Manager: {e}. Will retry when bot starts.")
+        logger.error(f"Could not start Autonomous Manager: {e}", exc_info=True)
+        logger.warning("Autonomous Manager will retry when a bot starts or when manually triggered.")
     
     # Load trading knowledge for all agents
     try:

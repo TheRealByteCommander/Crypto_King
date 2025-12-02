@@ -136,13 +136,24 @@ class AutonomousManager:
                 "5. Reagiere PROAKTIV - nutze diese Opportunities für maximalen Profit."
             )
             
-            # Sende Nachricht an CypherMind und erwarte Antwort (CypherMind soll Tools aufrufen)
-            user_proxy.send(
-                message=message,
-                recipient=cyphermind,
-                request_reply=True,
-                max_turns=5  # Erlaube mehrere Tool-Aufrufe
-            )
+            # Verwende initiate_chat für direkten Chat mit Tool-Aufrufen
+            import asyncio
+            loop = asyncio.get_event_loop()
+            
+            def run_chat():
+                try:
+                    user_proxy.initiate_chat(
+                        recipient=cyphermind,
+                        message=message,
+                        max_turns=10,  # Erlaube mehrere Tool-Aufrufe
+                        clear_history=False
+                    )
+                except Exception as chat_error:
+                    logger.error(f"Error in initiate_chat: {chat_error}", exc_info=True)
+                    raise
+            
+            # Führe Chat in Executor aus (nicht-blockierend)
+            await loop.run_in_executor(None, run_chat)
             
             logger.info(f"CypherMind activated with news context ({len(articles)} articles, {len(symbols_mentioned)} symbols)")
             
@@ -159,13 +170,20 @@ class AutonomousManager:
                 if self.last_analysis is None:
                     await asyncio.sleep(300)
                 
+                # Stelle sicher, dass Binance Client vorhanden ist
+                if self.binance_client is None:
+                    try:
+                        logger.info("Creating Binance client for autonomous analysis...")
+                        self.binance_client = BinanceClientWrapper()
+                        logger.info("Binance client created successfully")
+                    except Exception as client_error:
+                        logger.error(f"Could not create Binance client: {client_error}", exc_info=True)
+                        await asyncio.sleep(AUTONOMOUS_ANALYSIS_INTERVAL_SECONDS)
+                        continue
+                
                 # Prüfe ob Coin-Analyzer verfügbar ist
                 try:
                     from coin_analyzer import CoinAnalyzer
-                    if self.binance_client is None:
-                        logger.warning("Binance client not available, skipping autonomous analysis")
-                        await asyncio.sleep(AUTONOMOUS_ANALYSIS_INTERVAL_SECONDS)
-                        continue
                 except ImportError:
                     logger.warning("coin_analyzer not available, skipping autonomous analysis")
                     await asyncio.sleep(AUTONOMOUS_ANALYSIS_INTERVAL_SECONDS)
@@ -194,6 +212,9 @@ class AutonomousManager:
                 self.last_analysis = datetime.now(timezone.utc)
                 logger.info(f"Autonomous analysis cycle completed. Next analysis in {AUTONOMOUS_ANALYSIS_INTERVAL_SECONDS/60:.0f} minutes.")
                 
+                # Kurze Pause nach Aktivierung, damit CypherMind Zeit hat zu reagieren
+                await asyncio.sleep(10)
+                
             except Exception as e:
                 logger.error(f"Error in autonomous analysis loop: {e}", exc_info=True)
             
@@ -202,6 +223,21 @@ class AutonomousManager:
     async def _activate_cyphermind_for_analysis(self):
         """Aktiviert CypherMind für autonome Coin-Analyse und Bot-Start."""
         try:
+            # Stelle sicher, dass Binance Client vorhanden ist
+            if self.binance_client is None:
+                try:
+                    logger.info("Creating Binance client for autonomous analysis...")
+                    self.binance_client = BinanceClientWrapper()
+                    logger.info("Binance client created successfully")
+                except Exception as client_error:
+                    logger.error(f"Could not create Binance client: {client_error}", exc_info=True)
+                    await self.agent_manager.log_agent_message(
+                        "AutonomousManager",
+                        f"FEHLER: Konnte Binance Client nicht erstellen: {client_error}",
+                        "error"
+                    )
+                    return
+            
             # Hole Status aller laufenden Bots
             all_bots = self.bot_manager.get_all_bots()
             running_bots = [bot for bot in all_bots.values() if bot.is_running]
@@ -210,41 +246,75 @@ class AutonomousManager:
                 if bot.current_config and bot.current_config.get("autonomous", False)
             ]
             
-            # Erstelle Kontext-Nachricht
+            remaining_slots = MAX_AUTONOMOUS_BOTS - len(autonomous_bots)
+            
+            if remaining_slots <= 0:
+                logger.info(f"Max autonomous bots ({MAX_AUTONOMOUS_BOTS}) already running, skipping activation")
+                return
+            
+            # Erstelle klare, direkte Anweisung für CypherMind
             context_message = (
-                "AUTONOME ANALYSE-AUFGABE:\n\n"
-                f"Aktuell laufen {len(running_bots)} Bots insgesamt, davon {len(autonomous_bots)} autonome Bots.\n"
-                f"Du kannst noch {MAX_AUTONOMOUS_BOTS - len(autonomous_bots)} autonome Bots starten (max. {MAX_AUTONOMOUS_BOTS} insgesamt).\n\n"
-                "AUFGABE - KEY-FEATURE AUTOMATISCHE BOT-ERSTELLUNG:\n"
-                "1. Führe eine Coin-Analyse durch (analyze_optimal_coins, max_coins=20) um die besten Trading-Opportunities zu finden.\n"
-                "2. Prüfe ALLE handelbaren USDT-Paare - nicht nur die Top 10!\n"
-                "3. Wenn du Coins mit Score >= 0.4 findest, starte autonome Bots für die besten Coins.\n"
-                "4. Wähle die beste Strategie für jeden Coin basierend auf der Analyse.\n"
-                "5. Ziel: Maximaler Profit durch optimale Coin-Auswahl und Strategie-Kombination.\n\n"
-                "WICHTIG:\n"
-                "- Berücksichtige News-Informationen in deiner Analyse.\n"
-                "- Starte nur Bots wenn die Profit-Chance hoch ist (Score >= 0.4).\n"
-                "- Max. 6 autonome Bots insgesamt (KEY-FEATURE!).\n"
-                "- Budget wird automatisch berechnet (Durchschnitt, max. 40% Kapital).\n"
-                "- Das System stoppt automatisch erfolglose Bots nach 24h und startet sofort eine neue Analyse.\n"
-                "- Du wirst PERMANENT aktiviert (alle 30 Minuten) für optimale Bot-Verwaltung.\n"
+                "🚀 AUTONOME ANALYSE-AUFGABE - SOFORT AUSFÜHREN:\n\n"
+                f"Status: {len(autonomous_bots)}/{MAX_AUTONOMOUS_BOTS} autonome Bots laufen. Du kannst noch {remaining_slots} Bots starten.\n\n"
+                "KRITISCH - DU MUSST JETZT HANDELN:\n"
+                "1. Rufe SOFORT das Tool 'analyze_optimal_coins' auf mit:\n"
+                "   - max_coins=50 (analysiere viele Coins!)\n"
+                "   - min_score=0.4 (nur gute Opportunities)\n"
+                "   - exclude_symbols=[] (prüfe alle verfügbaren Paare)\n\n"
+                f"2. Wenn Coins mit Score >= 0.4 gefunden werden:\n"
+                f"   - Rufe SOFORT 'start_autonomous_bot' für die besten Coins auf\n"
+                f"   - Wähle die beste Strategie basierend auf der Analyse\n"
+                f"   - Starte bis zu {remaining_slots} Bots für maximale Profit-Chancen\n\n"
+                "3. WICHTIG:\n"
+                "   - Verwende die Tools DIREKT - keine Diskussion, direkt ausführen!\n"
+                "   - Budget wird automatisch berechnet\n"
+                "   - Ziel: Maximaler Profit durch optimale Coin-Auswahl\n\n"
+                f"BEGINNE JETZT MIT DER ANALYSE - Rufe analyze_optimal_coins auf! Du kannst noch {remaining_slots} Bots starten!"
             )
             
-            # Sende direkt an CypherMind
+            # Verwende initiate_chat statt send() für bessere Tool-Aufrufe
             cyphermind = self.agent_manager.get_agent("CypherMind")
             user_proxy = self.agent_manager.get_agent("UserProxy")
             
-            # Sende Nachricht und erwarte Antwort (CypherMind soll Tools aufrufen)
             try:
-                user_proxy.send(
-                    message=context_message,
-                    recipient=cyphermind,
-                    request_reply=True,
-                    max_turns=5  # Erlaube mehrere Tool-Aufrufe
+                # Logge Aktivierung
+                await self.agent_manager.log_agent_message(
+                    "AutonomousManager",
+                    f"Aktiviere CypherMind für autonome Analyse ({remaining_slots} Bot-Slots verfügbar)...",
+                    "info"
                 )
-                logger.info(f"CypherMind activated for autonomous analysis (can start {MAX_AUTONOMOUS_BOTS - len(autonomous_bots)} more bots)")
+                
+                # Verwende initiate_chat für direkten Chat mit Tool-Aufrufen
+                # Führe in einem Thread aus, da initiate_chat synchron ist
+                import asyncio
+                loop = asyncio.get_event_loop()
+                
+                def run_chat():
+                    try:
+                        user_proxy.initiate_chat(
+                            recipient=cyphermind,
+                            message=context_message,
+                            max_turns=10,  # Erlaube mehrere Tool-Aufrufe
+                            clear_history=False
+                        )
+                    except Exception as chat_error:
+                        logger.error(f"Error in initiate_chat: {chat_error}", exc_info=True)
+                        raise
+                
+                # Führe Chat in Executor aus (nicht-blockierend)
+                await loop.run_in_executor(None, run_chat)
+                
+                logger.info(f"CypherMind activated for autonomous analysis (can start {remaining_slots} more bots)")
+                
+                # Logge Erfolg
+                await self.agent_manager.log_agent_message(
+                    "AutonomousManager",
+                    f"CypherMind wurde erfolgreich aktiviert. Erwarte Bot-Starts...",
+                    "info"
+                )
+                
             except Exception as send_error:
-                logger.error(f"Error sending message to CypherMind: {send_error}", exc_info=True)
+                logger.error(f"Error activating CypherMind: {send_error}", exc_info=True)
                 # Logge auch in Agent-Logs
                 await self.agent_manager.log_agent_message(
                     "AutonomousManager",
@@ -254,6 +324,11 @@ class AutonomousManager:
             
         except Exception as e:
             logger.error(f"Error activating CypherMind for analysis: {e}", exc_info=True)
+            await self.agent_manager.log_agent_message(
+                "AutonomousManager",
+                f"FEHLER bei CypherMind-Aktivierung: {e}",
+                "error"
+            )
     
     async def _bot_performance_monitor_loop(self):
         """Permanente Überwachung der autonomen Bot-Performance und automatisches Stoppen erfolgloser Bots."""
