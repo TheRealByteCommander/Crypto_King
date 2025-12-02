@@ -29,6 +29,10 @@ from trading_pairs_cache import get_trading_pairs_cache
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Suppress FLAML automl warning (we don't use flaml.automl, it's just a dependency)
+import warnings
+warnings.filterwarnings("ignore", message=".*flaml.automl is not available.*")
+
 # Configure logging first
 logging.basicConfig(
     level=logging.INFO,

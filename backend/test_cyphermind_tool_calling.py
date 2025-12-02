@@ -5,7 +5,11 @@ Test-Skript: Prüft ob CypherMind Tools aufrufen kann
 
 import asyncio
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress FLAML automl warning (we don't use flaml.automl, it's just a dependency)
+warnings.filterwarnings("ignore", message=".*flaml.automl is not available.*")
 
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent))
