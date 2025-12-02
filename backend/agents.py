@@ -214,12 +214,16 @@ class AgentManager:
         # CypherMind Agent - Decision & Strategy
         cyphermind_config = self.agent_configs.get("cyphermind", {})
         base_message = cyphermind_config.get("system_message", "You are CypherMind agent.")
+        cyphermind_llm_config = self._get_llm_config("cyphermind")
+        
         self.agents["cyphermind"] = autogen.AssistantAgent(
             name=cyphermind_config.get("agent_name", "CypherMind"),
             system_message=base_message,
-            llm_config=self._get_llm_config("cyphermind")
+            llm_config=cyphermind_llm_config
         )
-        logger.info(f"✓ {cyphermind_config.get('agent_name')} initialized")
+        
+        tool_count = len(cyphermind_llm_config.get("functions", []))
+        logger.info(f"✓ {cyphermind_config.get('agent_name')} initialized with {tool_count} tools")
         
         # CypherTrade Agent - Trade Execution
         cyphertrade_config = self.agent_configs.get("cyphertrade", {})
@@ -232,14 +236,31 @@ class AgentManager:
         logger.info(f"✓ {cyphertrade_config.get('agent_name')} initialized")
         
         # User Proxy for orchestration
+        # UserProxy executes tools on behalf of agents
+        # Register function map for tool execution
+        function_map = {}
+        
+        # Register all CypherMind tools
+        cyphermind_tools = self.agent_tools.get_cyphermind_tools()
+        for tool in cyphermind_tools:
+            if "function" in tool and "name" in tool["function"]:
+                tool_name = tool["function"]["name"]
+                # Create a closure to capture tool_name and agent_tools
+                def make_tool_executor(name, tools, agent):
+                    async def executor(params):
+                        return await tools.execute_tool(name, params, agent)
+                    return executor
+                function_map[tool_name] = make_tool_executor(tool_name, self.agent_tools, "CypherMind")
+        
         self.agents["user_proxy"] = autogen.UserProxyAgent(
             name="UserProxy",
             system_message="Facilitate communication between agents and user.",
             human_input_mode="NEVER",
             max_consecutive_auto_reply=10,
             code_execution_config=False,
+            function_map=function_map if function_map else None,
         )
-        logger.info("✓ UserProxy initialized")
+        logger.info(f"✓ UserProxy initialized with {len(function_map)} registered functions")
         
         logger.info("=" * 60)
         logger.info("All agents initialized successfully from YAML configs")
