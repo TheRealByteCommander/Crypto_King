@@ -954,12 +954,20 @@ class TradingBot:
         """Learn from a closed position - called for all relevant agents."""
         try:
             # Determine outcome based on P&L
+            # Reduced threshold to enable more learning opportunities
             if pnl > MIN_PROFIT_LOSS_THRESHOLD:
                 outcome = "success"
             elif pnl < -MIN_PROFIT_LOSS_THRESHOLD:
                 outcome = "failure"
             else:
-                outcome = "neutral"
+                # Even neutral outcomes provide learning value (e.g., break-even trades, small profits/losses)
+                # Use absolute P&L to determine if it's slightly positive or negative
+                if pnl > 0:
+                    outcome = "neutral_positive"  # Small profit, but below threshold
+                elif pnl < 0:
+                    outcome = "neutral_negative"  # Small loss, but above threshold
+                else:
+                    outcome = "neutral"  # Exactly break-even
             
             # Prepare trade data for learning
             learning_trade = {
@@ -1052,6 +1060,12 @@ class TradingBot:
             cyphertrade_memory = self.agent_manager.memory_manager.get_agent_memory("CypherTrade")
             await cyphertrade_memory.learn_from_trade(learning_trade, outcome, pnl, candle_data)
             logger.info(f"Bot {self.bot_id}: CypherTrade learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
+            
+            # Learn for NexusChat (UI agent) - learns from trade outcomes and user interactions
+            # NexusChat learns from successful/failed trades to improve communication and trade confirmation accuracy
+            nexuschat_memory = self.agent_manager.memory_manager.get_agent_memory("NexusChat")
+            await nexuschat_memory.learn_from_trade(learning_trade, outcome, pnl, candle_data)
+            logger.info(f"Bot {self.bot_id}: NexusChat learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
             
             # Store collective memory about trade outcome
             await self.agent_manager.memory_manager.store_collective_memory(

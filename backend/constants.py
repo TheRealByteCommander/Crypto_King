@@ -20,7 +20,7 @@ DEFAULT_BOLLINGER_PERIOD = 20
 DEFAULT_BOLLINGER_STD_DEV = 2
 
 # Risk Management Constants
-MIN_PROFIT_LOSS_THRESHOLD = 2.0  # $2 minimum loss to consider as failure
+MIN_PROFIT_LOSS_THRESHOLD = 0.5  # $0.50 minimum profit/loss to consider as success/failure (reduced from $2.0 to enable more learning)
 QUANTITY_DECIMAL_PLACES = 6
 STOP_LOSS_PERCENT = -2.0  # Stop loss at -2% (sell position if loss >= 2%)
 TAKE_PROFIT_MIN_PERCENT = 2.0  # Minimum take profit threshold (+2% - earliest we can take profit)

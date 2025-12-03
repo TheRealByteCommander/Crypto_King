@@ -740,6 +740,27 @@ class AgentManager:
                             )
                             
                             logger.info(f"Trade executed successfully: {trade_side} {executed_quantity} {trade_symbol} (Order ID: {order_id})")
+                            
+                            # NexusChat learns from successful trade execution
+                            # This helps NexusChat improve trade confirmation accuracy and user communication
+                            try:
+                                nexuschat_memory = self.memory_manager.get_agent_memory("NexusChat")
+                                await nexuschat_memory.store_memory(
+                                    memory_type="trade_execution",
+                                    content={
+                                        "trade_side": trade_side,
+                                        "symbol": trade_symbol,
+                                        "quantity": executed_quantity,
+                                        "price": price,
+                                        "order_id": order_id,
+                                        "execution_status": "success",
+                                        "execution_method": "manual_via_nexuschat"
+                                    },
+                                    metadata={"bot_id": actual_bot.bot_id if actual_bot else None}
+                                )
+                                logger.debug(f"NexusChat learned from successful trade execution: {trade_side} {trade_symbol}")
+                            except Exception as e:
+                                logger.warning(f"Error storing NexusChat memory for trade execution: {e}")
                         else:
                             error_message = trade_result.get('message', 'Unbekannter Fehler')
                             context_parts.append(f"\n[TRADE FEHLGESCHLAGEN]")
@@ -753,6 +774,27 @@ class AgentManager:
                                 "error"
                             )
                             logger.error(f"Trade execution failed: {error_message}")
+                            
+                            # NexusChat learns from failed trade execution
+                            # This helps NexusChat improve error handling and user communication
+                            try:
+                                nexuschat_memory = self.memory_manager.get_agent_memory("NexusChat")
+                                await nexuschat_memory.store_memory(
+                                    memory_type="trade_execution",
+                                    content={
+                                        "trade_side": trade_side,
+                                        "symbol": trade_symbol,
+                                        "quantity": trade_quantity,
+                                        "amount_usdt": trade_amount,
+                                        "execution_status": "failed",
+                                        "error_message": error_message,
+                                        "execution_method": "manual_via_nexuschat"
+                                    },
+                                    metadata={"bot_id": actual_bot.bot_id if actual_bot else None}
+                                )
+                                logger.debug(f"NexusChat learned from failed trade execution: {error_message}")
+                            except Exception as e:
+                                logger.warning(f"Error storing NexusChat memory for failed trade: {e}")
                     else:
                         error_msg = "Binance Client nicht verfügbar. Bitte starte den Bot zuerst."
                         context_parts.append(f"\n[TRADE FEHLER]")
