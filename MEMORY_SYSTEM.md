@@ -11,7 +11,7 @@ Das Memory-System ermöglicht es jedem Agent:
 - ✅ Performance über Zeit zu verbessern
 - ✅ Wissen zwischen Sessions zu behalten
 
-**WICHTIG:** Das Learning-System wird automatisch bei jedem abgeschlossenen Trade aktiviert. Beide Agents (CypherMind & CypherTrade) lernen aus jedem Trade-Outcome.
+**WICHTIG:** Das Learning-System wird automatisch bei jedem abgeschlossenen Trade aktiviert. Alle drei Agents (NexusChat, CypherMind & CypherTrade) lernen aus jedem Trade-Outcome. NexusChat lernt zusätzlich von Trade-Bestätigungen und User-Interaktionen.
 
 **NEU:** Das System trackt jetzt auch kontinuierlich Kerzendaten (Pre-Trade, During-Trade, Post-Trade) für besseres Learning und Vorhersagen. Siehe [CANDLE_TRACKING_IMPLEMENTATION.md](CANDLE_TRACKING_IMPLEMENTATION.md) für Details.
 
@@ -105,7 +105,7 @@ await memory.learn_from_trade(
         "price_slippage": 25.0,  # Preis-Differenz
         "price_slippage_percent": 0.05  # Slippage in %
     },
-    outcome="success",  # or "failure", "neutral"
+    outcome="success",  # or "failure", "neutral", "neutral_positive", "neutral_negative"
     profit_loss=100.0,
     candle_data={  # Optional: Wird automatisch geladen wenn verfügbar
         "pre_trade": {...},      # 200 Kerzen vor Trade

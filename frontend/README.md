@@ -10,7 +10,7 @@ Ein vollständiges, modulares und sicheres Multi-Agent-System für den automatis
 - **CypherTrade Agent**: Trade Execution Agent - Führt Trades auf Binance sicher aus
 
 ### Trading Features
-- ✅ **5 Trading-Strategien**: MA Crossover, RSI, MACD, Bollinger Bands, Combined
+- ✅ **6 Trading-Strategien**: MA Crossover, RSI, MACD, Bollinger Bands, Combined, Grid Trading
 - ✅ **Flexible Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
 - ✅ **Trading Modes**: SPOT, MARGIN, FUTURES (Short Trading unterstützt)
 - ✅ Automatische Marktdatenanalyse (konfigurierbares Intervall)
@@ -142,7 +142,7 @@ Nach Änderungen: `sudo supervisorctl restart backend`
 
 ## 📊 Trading Strategien
 
-Project CypherTrade unterstützt **5 Trading-Strategien**:
+Project CypherTrade unterstützt **6 Trading-Strategien**:
 
 1. **Moving Average Crossover** - Fast SMA (20) kreuzt Slow SMA (50)
    - **Kaufsignal**: Fast > Slow (von unten)
@@ -160,6 +160,9 @@ Project CypherTrade unterstützt **5 Trading-Strategien**:
 
 5. **Combined** - Multi-Indikator (MA + RSI + MACD)
    - Konsens aus 3 Strategien (empfohlen für Anfänger)
+
+6. **Grid Trading** - Range Trading Strategie
+   - Profitiert von Preis-Oszillationen in einem definierten Bereich
 
 **Verfügbare Timeframes**: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
 

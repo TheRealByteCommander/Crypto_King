@@ -467,7 +467,7 @@ Bei Fragen oder Problemen:
 ## 🆕 Neu in dieser Version
 
 ### Implementierte Features
-- ✅ **5 Trading-Strategien** vollständig implementiert
+- ✅ **6 Trading-Strategien** vollständig implementiert (inkl. Grid Trading)
 - ✅ **Trading Modes**: SPOT, MARGIN, FUTURES mit Short Trading Support
 - ✅ **Flexible Timeframes**: Von 1 Minute bis 1 Monat
 - ✅ **Memory System**: Agents lernen aus vergangenen Trades

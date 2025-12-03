@@ -46,7 +46,7 @@ sudo supervisorctl restart cyphertrade-backend
 1. **Dashboard öffnen:** `http://localhost:3000`
 
 2. **Bot konfigurieren:**
-   - Strategie: `MA Crossover`, `RSI`, `MACD`, `Bollinger Bands` oder `Combined`
+   - Strategie: `MA Crossover`, `RSI`, `MACD`, `Bollinger Bands`, `Combined` oder `Grid Trading`
    - Symbol: `BTCUSDT` (oder jedes andere Binance-Paar)
    - Amount: `10` (USDT)
    - Timeframe: `5m` (oder 1m, 15m, 30m, 1h, 4h, 1d, etc.)
@@ -195,6 +195,7 @@ sudo supervisorctl restart cyphertrade-backend
    - **MACD**: Trend + Momentum Kombination
    - **Bollinger Bands**: Volatilitäts-Trading
    - **Combined**: Multi-Indikator Konsens (empfohlen für Anfänger)
+   - **Grid Trading**: Range Trading, profitiert von Preis-Oszillationen
 5. **Geduld:** Trades passieren nur bei klaren Signalen
 
 ## 🎉 Ready!
