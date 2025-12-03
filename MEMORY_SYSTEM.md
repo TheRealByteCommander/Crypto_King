@@ -346,6 +346,8 @@ curl http://localhost:8001/api/memory/insights/collective
 }
 ```
 
+**Hinweis:** NexusChat lernt von Trade-Bestätigungen (erfolgreich/fehlgeschlagen), User-Interaktionen und geschlossenen Positionen. CypherMind und CypherTrade lernen primär von geschlossenen Positionen.
+
 ## 🧪 Testing Memory System
 
 ### Manual Test

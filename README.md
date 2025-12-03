@@ -470,7 +470,7 @@ Bei Fragen oder Problemen:
 - ✅ **6 Trading-Strategien** vollständig implementiert (inkl. Grid Trading)
 - ✅ **Trading Modes**: SPOT, MARGIN, FUTURES mit Short Trading Support
 - ✅ **Flexible Timeframes**: Von 1 Minute bis 1 Monat
-- ✅ **Memory System**: Agents lernen aus vergangenen Trades
+- ✅ **Memory System**: Alle drei Agents (NexusChat, CypherMind, CypherTrade) lernen aus vergangenen Trades
 - ✅ **Kerzen-Tracking-System**: Kontinuierliches Tracking von Pre-Trade, During-Trade und Post-Trade Kerzen
 - ✅ **Agent Tools**: Funktionale Tools für alle Agents
 - ✅ **Portfolio Management**: Multi-Asset Tracking mit P&L
@@ -481,6 +481,9 @@ Bei Fragen oder Problemen:
 - 🆕 **Candle Tracking System**: Vollständiges Tracking von 200 Kerzen vor Trades, allen Kerzen während Positionen, und 200 Kerzen nach Verkäufen
 - 🆕 **Position Tracking**: Kontinuierliches Tracking aller Kursdaten zwischen Kauf und Verkauf
 - 🆕 **Enhanced Learning**: Pattern-Erkennung aus Kerzen-Daten für bessere Vorhersagen
+- 🆕 **NexusChat Learning**: NexusChat lernt jetzt auch von Trade-Bestätigungen und User-Interaktionen
+- 🆕 **Grid Trading Strategy**: Neue Range-Trading-Strategie für Seitwärtsmärkte
+- 🆕 **Verbessertes Learning**: Reduzierter Threshold ($0.50 statt $2.0) für mehr Learning-Möglichkeiten
 
 ### Weitere Dokumentation
 - [TRADING_STRATEGIES.md](TRADING_STRATEGIES.md) - Detaillierte Strategie-Dokumentation
