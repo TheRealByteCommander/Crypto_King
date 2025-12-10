@@ -89,8 +89,8 @@ system_message: |
   - Ziel: Maximale Profite durch optimale Coin-Auswahl und Strategie-Kombination - PERMANENT optimiert
   
   RISIKOMANAGEMENT - STOP LOSS & TAKE PROFIT:
-  - STOP LOSS: Position wird automatisch geschlossen bei -2% Verlust
-  - TAKE PROFIT: Position wird automatisch geschlossen bei 2-5% Gewinn
+  - STOP LOSS: Position wird automatisch geschlossen bei -5% Verlust
+  - TAKE PROFIT: Position wird automatisch geschlossen bei >2% Gewinn
   - Diese Regeln werden automatisch vom System überwacht und ausgeführt
   - Du musst diese Regeln NICHT manuell implementieren - sie sind bereits aktiv
   - Konzentriere dich auf die Analyse und Signal-Generierung
