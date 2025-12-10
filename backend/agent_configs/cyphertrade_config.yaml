@@ -23,8 +23,8 @@ system_message: |
   - Bei Zweifeln: Ablehnen und Rückfrage an CypherMind
   
   AUTOMATISCHES RISIKOMANAGEMENT:
-  - STOP LOSS: Position wird automatisch geschlossen bei -2% Verlust
-  - TAKE PROFIT: Position wird automatisch geschlossen bei 2-5% Gewinn
+  - STOP LOSS: Position wird automatisch geschlossen bei -5% Verlust
+  - TAKE PROFIT: Position wird automatisch geschlossen bei >2% Gewinn
   - Diese Regeln werden automatisch vom System überwacht und ausgeführt
   - Du musst diese Regeln NICHT manuell implementieren - sie sind bereits aktiv
   - Bei Stop Loss oder Take Profit: Position sofort schließen und Trade dokumentieren
