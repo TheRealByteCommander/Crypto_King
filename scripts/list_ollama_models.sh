@@ -6,7 +6,7 @@
 #   oder
 #   bash scripts/list_ollama_models.sh
 
-OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
+OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://192.168.178.155:11434}"
 OLLAMA_API_TAGS="${OLLAMA_BASE_URL}/api/tags"
 
 echo "=================================================================================="
