@@ -584,7 +584,12 @@ class TradingBot:
                                     if total_qty > 0:
                                         execution_price = total_quote / total_qty
                             elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                                execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                                executed_qty = float(order.get("executedQty", 0))
+                                if executed_qty > 0:
+                                    execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
+                                else:
+                                    logger.warning(f"Bot {self.bot_id}: executedQty is 0, using fallback price")
+                                    execution_price = float(order.get("price", 0)) or current_price
                             
                             # Calculate final P&L
                             pnl = (execution_price - self.position_entry_price) * quantity
@@ -659,6 +664,9 @@ class TradingBot:
                 elif self.position == "SHORT":
                     # Execute BUY to close SHORT
                     amount_usdt = self.current_config["amount"]
+                    if current_price is None or current_price <= 0:
+                        logger.error(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for SHORT close, skipping trade")
+                        return
                     quantity = amount_usdt / current_price
                     quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
                     adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
@@ -805,7 +813,12 @@ class TradingBot:
                             elif order.get("price"):
                                 execution_price = float(order.get("price"))
                             elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                                execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                                executed_qty = float(order.get("executedQty", 0))
+                                if executed_qty > 0:
+                                    execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
+                                else:
+                                    logger.warning(f"Bot {self.bot_id}: executedQty is 0, using fallback price")
+                                    execution_price = float(order.get("price", 0)) or current_price
                             
                             # Calculate final P&L using actual execution price
                             pnl = (execution_price - self.position_entry_price) * quantity
@@ -873,6 +886,9 @@ class TradingBot:
                 elif self.position == "SHORT":
                     # Execute BUY to close SHORT
                     amount_usdt = self.current_config["amount"]
+                    if current_price is None or current_price <= 0:
+                        logger.error(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for SHORT close, skipping trade")
+                        return
                     quantity = amount_usdt / current_price
                     quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
                     adjusted_quantity = self.binance_client.adjust_quantity_to_notional(symbol, quantity, current_price)
@@ -1226,6 +1242,16 @@ class TradingBot:
                 
                 # Get current price first
                 current_price = self.binance_client.get_current_price(symbol)
+                
+                # Validate current price
+                if current_price is None or current_price <= 0:
+                    logger.error(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for BUY order, skipping trade")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"⚠️ Cannot execute BUY order: Invalid current price for {symbol} ({current_price})",
+                        "error"
+                    )
+                    return
                 
                 # Get trading mode
                 trading_mode = self.current_config.get("trading_mode", "SPOT")
@@ -1685,6 +1711,11 @@ class TradingBot:
                     
                     amount_usdt = self.current_config["amount"]
                     
+                    # Validate current price before division
+                    if current_price is None or current_price <= 0:
+                        logger.error(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for SHORT close, skipping trade")
+                        return
+                    
                     # Calculate quantity to buy to close short
                     quantity = amount_usdt / current_price
                     quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
@@ -1801,6 +1832,11 @@ class TradingBot:
                         amount_usdt = self.current_config["amount"]
                         current_price = self.binance_client.get_current_price(symbol)
                         
+                        # Validate current price before division
+                        if current_price is None or current_price <= 0:
+                            logger.error(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for SHORT open, skipping trade")
+                            return
+                        
                         # Calculate quantity
                         quantity = amount_usdt / current_price
                         quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, quantity)
@@ -1915,6 +1951,10 @@ class TradingBot:
             # Get current price
             current_price = self.binance_client.get_current_price(symbol)
             
+            # Validate current price
+            if current_price is None or current_price <= 0:
+                return {"success": False, "message": f"Invalid current price for {symbol}: {current_price}. Cannot execute trade."}
+            
             # Calculate quantity if not provided
             if quantity is None:
                 if amount_usdt is None:
@@ -1925,6 +1965,8 @@ class TradingBot:
                     quote_asset = BinanceClientWrapper.extract_quote_asset(symbol)
                     balance = self.binance_client.get_account_balance(quote_asset, trading_mode=self.current_config.get("trading_mode", "SPOT"))
                     amount_to_use = min(amount_usdt, balance)
+                    if current_price <= 0:
+                        return {"success": False, "message": f"Invalid current price for {symbol}: {current_price}. Cannot calculate quantity."}
                     quantity = amount_to_use / current_price
                 elif side == "SELL":
                     # Extract base asset correctly (supports all quote assets)
