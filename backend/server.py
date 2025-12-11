@@ -41,15 +41,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # MongoDB connection - use settings for consistency
+# WICHTIG: MongoDB-Verbindung darf Import nicht blockieren!
 try:
     mongo_url = settings.mongo_url
     db_name = settings.db_name
-    client = AsyncIOMotorClient(mongo_url)
+    client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)  # 5 Sekunden Timeout
     db = client[db_name]
-    logger.info(f"MongoDB connected to {db_name}")
+    logger.info(f"MongoDB connection initialized for {db_name}")
+    # Teste Verbindung nicht synchron beim Import (wird später getestet)
 except Exception as e:
-    logger.error(f"Failed to connect to MongoDB: {e}")
-    raise
+    logger.warning(f"Could not initialize MongoDB connection: {e}")
+    # Erstelle Dummy-DB-Objekt, damit Import nicht fehlschlägt
+    # Die Verbindung wird später bei Bedarf erneut versucht
+    db = None
+    logger.warning("MongoDB connection will be retried later")
 
 # Create the main app without a prefix
 app = FastAPI(
@@ -90,10 +95,19 @@ agent_manager.bot = bot_manager
 default_bot = bot_manager.get_bot()
 
 # Initialize MCP Server if enabled
-mcp_server = create_mcp_server(db, agent_manager, bot_manager)
-if mcp_server:
-    app.include_router(mcp_server.router)
-    logger.info("MCP Server routes registered")
+# WICHTIG: MCP Server Initialisierung darf Import nicht blockieren
+try:
+    if db is not None and agent_manager is not None and bot_manager is not None:
+        mcp_server = create_mcp_server(db, agent_manager, bot_manager)
+        if mcp_server:
+            app.include_router(mcp_server.router)
+            logger.info("MCP Server routes registered")
+    else:
+        mcp_server = None
+        logger.warning("MCP Server not initialized (DB or managers not available)")
+except Exception as e:
+    logger.warning(f"Could not initialize MCP Server: {e}")
+    mcp_server = None
 
 # WebSocket connections manager
 class ConnectionManager:
