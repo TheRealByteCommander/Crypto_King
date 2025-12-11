@@ -1343,8 +1343,19 @@ class TradingBot:
                     if fills:
                         total_qty = sum(float(f.get("qty", 0)) for f in fills)
                         total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
-                        if total_qty > 0:
+                        if total_qty > 0 and total_quote > 0:
                             execution_price = total_quote / total_qty
+                        elif total_qty > 0:
+                            # If total_quote is 0 but total_qty > 0, calculate from fills
+                            total_value = sum(float(f.get("price", 0)) * float(f.get("qty", 0)) for f in fills if f.get("price"))
+                            if total_value > 0:
+                                execution_price = total_value / total_qty
+                            else:
+                                logger.warning(f"Bot {self.bot_id}: Cannot calculate execution_price from fills, using fallback")
+                                execution_price = float(order.get("price", 0)) or current_price
+                        else:
+                            logger.warning(f"Bot {self.bot_id}: total_qty is 0 in fills, using fallback price")
+                            execution_price = float(order.get("price", 0)) or current_price
                 
                 # Calculate delay and slippage
                 execution_delay_seconds = None
