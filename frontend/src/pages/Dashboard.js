@@ -152,10 +152,13 @@ const Dashboard = () => {
       }
       setStats(statsRes.data);
       setAgents(agentsRes.data.agents);
-      // Debug: Log stats to see what we're getting
-      console.log("Stats received:", statsRes.data);
-      console.log("Depot Summe:", statsRes.data?.depot_summe);
-      console.log("Total Trades 7d:", statsRes.data?.total_trades_7d);
+      // Debug: Log stats to see what we're getting (nur im Development)
+      if (process.env.NODE_ENV === 'development') {
+        console.log("Stats received:", statsRes.data);
+        console.log("Depot Summe:", statsRes.data?.depot_summe);
+        console.log("Total Trades 7d:", statsRes.data?.total_trades_7d);
+        console.log("Profit/Loss 24h:", statsRes.data?.profit_loss_usdt_24h);
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     }
@@ -220,29 +223,47 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 mb-4 md:mb-8">
             <StatsCard
               title="Profit/Loss (24h)"
-              value={stats && stats.profit_loss_usdt_24h !== undefined ? `$${stats.profit_loss_usdt_24h.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00"}
+              value={(() => {
+                const value = stats?.profit_loss_usdt_24h;
+                if (value === null || value === undefined || isNaN(value)) return "$0.00";
+                return `$${Number(value).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              })()}
               icon={
-                stats && stats.profit_loss_usdt_24h !== undefined && stats.profit_loss_usdt_24h >= 0
-                  ? TrendingUp
-                  : TrendingDown
+                (() => {
+                  const value = stats?.profit_loss_usdt_24h;
+                  return value !== null && value !== undefined && !isNaN(value) && Number(value) >= 0
+                    ? TrendingUp
+                    : TrendingDown;
+                })()
               }
               color={
-                stats && stats.profit_loss_usdt_24h !== undefined && stats.profit_loss_usdt_24h >= 0
-                  ? "green"
-                  : "red"
+                (() => {
+                  const value = stats?.profit_loss_usdt_24h;
+                  return value !== null && value !== undefined && !isNaN(value) && Number(value) >= 0
+                    ? "green"
+                    : "red";
+                })()
               }
               testId="profit-loss-card"
             />
             <StatsCard
               title="Depot Summe"
-              value={stats && stats.depot_summe !== undefined ? `$${stats.depot_summe.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00"}
+              value={(() => {
+                const value = stats?.depot_summe;
+                if (value === null || value === undefined || isNaN(value)) return "$0.00";
+                return `$${Number(value).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              })()}
               icon={Wallet}
               color="indigo"
               testId="depot-summe-card"
             />
             <StatsCard
               title="Total Trades (7 Tage)"
-              value={stats && stats.total_trades_7d !== undefined ? stats.total_trades_7d : 0}
+              value={(() => {
+                const value = stats?.total_trades_7d;
+                if (value === null || value === undefined || isNaN(value)) return 0;
+                return Number(value);
+              })()}
               icon={Activity}
               color="blue"
               testId="total-trades-card"

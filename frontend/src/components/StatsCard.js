@@ -6,7 +6,8 @@ const StatsCard = ({ title, value, icon: Icon, color, testId }) => {
     red: "from-red-600/20 to-rose-600/20 border-red-500/30 text-red-400",
     blue: "from-blue-600/20 to-indigo-600/20 border-blue-500/30 text-blue-400",
     cyan: "from-cyan-600/20 to-teal-600/20 border-cyan-500/30 text-cyan-400",
-    purple: "from-purple-600/20 to-violet-600/20 border-purple-500/30 text-purple-400"
+    purple: "from-purple-600/20 to-violet-600/20 border-purple-500/30 text-purple-400",
+    indigo: "from-indigo-600/20 to-purple-600/20 border-indigo-500/30 text-indigo-400"
   };
 
   return (
