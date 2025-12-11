@@ -767,8 +767,9 @@ class AgentManager:
                             # NexusChat learns from successful trade execution
                             # This helps NexusChat improve trade confirmation accuracy and user communication
                             try:
-                                nexuschat_memory = self.memory_manager.get_agent_memory("NexusChat")
-                                await nexuschat_memory.store_memory(
+                                if self.memory_manager is not None:
+                                    nexuschat_memory = self.memory_manager.get_agent_memory("NexusChat")
+                                    await nexuschat_memory.store_memory(
                                     memory_type="trade_execution",
                                     content={
                                         "trade_side": trade_side,
