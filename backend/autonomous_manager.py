@@ -271,27 +271,21 @@ class AutonomousManager:
                 logger.info(f"Max autonomous bots ({MAX_AUTONOMOUS_BOTS}) already running, skipping activation")
                 return
             
-            # Erstelle klare, direkte Anweisung für CypherMind
+            # Erstelle klare, direkte Anweisung für CypherMind - KURZ und EINDEUTIG
             context_message = (
-                "🚀 AUTONOME ANALYSE-AUFGABE - SOFORT AUSFÜHREN:\n\n"
-                f"Status: {len(autonomous_bots)}/{MAX_AUTONOMOUS_BOTS} autonome Bots laufen. Du MUSST noch {remaining_slots} Bots starten!\n\n"
-                "KRITISCH - DU MUSST JETZT HANDELN UND BOTS STARTEN:\n"
-                "1. Rufe SOFORT das Tool 'analyze_optimal_coins' auf mit:\n"
-                "   - max_coins=50 (analysiere viele Coins!)\n"
-                "   - min_score=0.3 (starte mit 0.3, falls keine mit 0.4 gefunden werden, verwende 0.2)\n"
-                "   - exclude_symbols=[] (prüfe alle verfügbaren Paare)\n\n"
-                f"2. WICHTIG - DU MUSST BOTS STARTEN:\n"
-                f"   - Wenn Coins mit Score >= 0.4 gefunden werden: Starte SOFORT 'start_autonomous_bot' für die TOP {remaining_slots} Coins!\n"
-                f"   - Wenn KEINE Coins mit Score >= 0.4 gefunden werden: Starte trotzdem Bots für die BESTEN gefundenen Coins (auch bei Score 0.3 oder 0.2)!\n"
-                f"   - DU MUSST MINDESTENS 1 BOT STARTEN - auch wenn der Score niedrig ist!\n"
-                f"   - Wähle die beste Strategie basierend auf der Analyse\n"
-                f"   - Starte bis zu {remaining_slots} Bots für maximale Profit-Chancen\n\n"
-                "3. KRITISCH - KEINE DISKUSSION:\n"
-                "   - Verwende die Tools DIREKT - keine Diskussion, direkt ausführen!\n"
-                "   - Budget wird automatisch berechnet\n"
-                "   - Ziel: BOTS STARTEN - auch bei niedrigeren Scores!\n"
-                "   - Wenn keine Coins gefunden werden, analysiere mit min_score=0.2 und starte trotzdem Bots!\n\n"
-                f"BEGINNE JETZT: Rufe analyze_optimal_coins auf, dann starte SOFORT {remaining_slots} Bots mit start_autonomous_bot!"
+                f"STARTE {remaining_slots} AUTONOME BOTS JETZT!\n\n"
+                f"Du kannst noch {remaining_slots} Bots starten. Führe diese Schritte AUS:\n\n"
+                "SCHRITT 1: Rufe analyze_optimal_coins(max_coins=50, min_score=0.2) auf\n"
+                "SCHRITT 2: Starte SOFORT start_autonomous_bot für die besten gefundenen Coins\n\n"
+                "BEISPIEL:\n"
+                "1. analyze_optimal_coins(max_coins=50, min_score=0.2)\n"
+                "2. Wenn Coins gefunden: start_autonomous_bot(symbol=\"ETHUSDT\", strategy=\"combined\")\n"
+                "3. Wiederhole für weitere Coins bis {remaining_slots} Bots gestartet sind\n\n"
+                "WICHTIG:\n"
+                "- Starte MINDESTENS 1 Bot, auch wenn Score niedrig ist\n"
+                "- Verwende die beste Strategie aus der Analyse\n"
+                "- KEINE Diskussion - direkt ausführen!\n\n"
+                "BEGINNE JETZT!"
             )
             
             # Verwende initiate_chat statt send() für bessere Tool-Aufrufe
@@ -332,20 +326,43 @@ class AutonomousManager:
                 
                 def run_chat():
                     try:
-                        user_proxy.initiate_chat(
+                        logger.info(f"CypherMind: Starting chat with message (length: {len(context_message)} chars)")
+                        result = user_proxy.initiate_chat(
                             recipient=cyphermind,
                             message=context_message,
-                            max_turns=10,  # Erlaube mehrere Tool-Aufrufe
-                            clear_history=False
+                            max_turns=15,  # Mehr Turns für mehrere Bot-Starts
+                            clear_history=False,
+                            silent=False  # Zeige alle Nachrichten für Debugging
                         )
+                        logger.info(f"CypherMind: Chat completed. Result type: {type(result)}")
+                        # Logge Chat-Historie falls verfügbar
+                        if hasattr(result, 'chat_history') and result.chat_history:
+                            logger.info(f"CypherMind: Chat history length: {len(result.chat_history)}")
+                            # Logge letzte Nachrichten
+                            for i, msg in enumerate(result.chat_history[-5:]):
+                                logger.debug(f"CypherMind chat message {i}: {str(msg)[:200]}")
+                        return result
                     except Exception as chat_error:
                         logger.error(f"Error in initiate_chat: {chat_error}", exc_info=True)
                         raise
                 
                 # Führe Chat in Executor aus (nicht-blockierend)
-                await loop.run_in_executor(None, run_chat)
+                chat_result = await loop.run_in_executor(None, run_chat)
+                
+                # Prüfe ob Bots gestartet wurden
+                await asyncio.sleep(2)  # Kurz warten, damit Bot-Starts verarbeitet werden
+                all_bots_after = self.bot_manager.get_all_bots()
+                autonomous_bots_after = [
+                    bot for bot in all_bots_after.values()
+                    if bot.is_running and bot.current_config and bot.current_config.get("autonomous", False)
+                ]
+                bots_started = len(autonomous_bots_after) - len(autonomous_bots)
                 
                 logger.info(f"CypherMind activated for autonomous analysis (can start {remaining_slots} more bots)")
+                if bots_started > 0:
+                    logger.info(f"✅ CypherMind hat {bots_started} Bot(s) gestartet!")
+                else:
+                    logger.warning(f"⚠️ CypherMind wurde aktiviert, aber es wurden keine Bots gestartet (erwartet: {remaining_slots})")
                 
                 # Logge Erfolg
                 await self.agent_manager.log_agent_message(

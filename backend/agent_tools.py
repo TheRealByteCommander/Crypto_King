@@ -974,12 +974,15 @@ class AgentTools:
             
             elif tool_name == "analyze_optimal_coins":
                 try:
+                    logger.info(f"🔍 CypherMind: analyze_optimal_coins called by {agent_name} with params: {parameters}")
                     if self.binance_client is None:
+                        logger.error("CypherMind: Binance client not available for analyze_optimal_coins")
                         return {"error": "Binance client not available", "success": False}
                     
                     max_coins = parameters.get("max_coins", 20)
                     min_score = parameters.get("min_score", 0.2)
                     exclude_symbols = parameters.get("exclude_symbols", None)
+                    logger.info(f"CypherMind: Analyzing coins - max_coins={max_coins}, min_score={min_score}")
                     
                     # Validate parameters
                     if max_coins < 1 or max_coins > 50:  # Erhöht von 20 auf 50
@@ -1008,6 +1011,11 @@ class AgentTools:
                         if results:
                             logger.info(f"Found {len(results)} coins with lower threshold (0.2)")
                     
+                    logger.info(f"✅ CypherMind: analyze_optimal_coins completed - found {len(results)} coins")
+                    if results:
+                        top_coins = results[:3]
+                        logger.info(f"CypherMind: Top coins: {[(c.get('symbol'), c.get('score', 0)) for c in top_coins]}")
+                    
                     return {
                         "success": True,
                         "count": len(results),
@@ -1020,7 +1028,9 @@ class AgentTools:
             
             elif tool_name == "start_autonomous_bot":
                 try:
+                    logger.info(f"🚀 CypherMind: start_autonomous_bot called by {agent_name} with params: {parameters}")
                     if agent_name != "CypherMind":
+                        logger.warning(f"start_autonomous_bot called by {agent_name}, but only CypherMind can start bots")
                         return {"error": "Only CypherMind can start autonomous bots", "success": False}
                     
                     if self.bot is None:
@@ -1106,8 +1116,9 @@ class AgentTools:
                         }
                     
                     # Start bot
-                    logger.info(f"Attempting to start autonomous bot: symbol={symbol}, strategy={strategy}, budget={calculated_budget}")
+                    logger.info(f"🚀 CypherMind: Attempting to start autonomous bot: symbol={symbol}, strategy={strategy}, budget={calculated_budget:.2f} USDT")
                     result = await new_bot.start(strategy, symbol, calculated_budget, timeframe, trading_mode)
+                    logger.info(f"CypherMind: Bot start result: success={result.get('success')}, message={result.get('message', 'N/A')[:100]}")
                     
                     if result.get("success"):
                         # Verify bot is actually running
