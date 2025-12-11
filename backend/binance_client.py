@@ -238,12 +238,11 @@ class BinanceClientWrapper:
             
             # KRITISCH: Stelle sicher, dass alle notwendigen Daten vorhanden sind
             # Falls die Order-Antwort unvollständig ist, hole die vollständigen Daten nach
+            # Hinweis: Bei MARKET Orders sollten die Daten sofort verfügbar sein
+            # Falls nicht, könnte es ein Timing-Problem sein - dann wird get_order_status verwendet
             if not order.get('fills') and not order.get('price') and not order.get('cummulativeQuoteQty'):
-                logger.warning(f"Order response incomplete, fetching full order details for {order_id}")
-                try:
-                    # Hole vollständige Order-Daten nach kurzer Wartezeit (Order muss verarbeitet werden)
-                    import time
-                    time.sleep(0.5)  # Kurz warten, damit Order verarbeitet wird
+                logger.warning(f"Order response incomplete for {order_id}, will fetch full details if needed")
+                # Nicht hier warten - wird später in _get_execution_price_from_order gemacht falls nötig
                     
                     if trading_mode == "SPOT":
                         full_order = self.client.get_order(symbol=symbol, orderId=order_id)
