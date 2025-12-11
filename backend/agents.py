@@ -194,6 +194,9 @@ class AgentManager:
     
     async def update_trading_knowledge(self, force_refresh: bool = False):
         """Lädt und aktualisiert Trading-Wissen für alle Agents."""
+        if self.trading_knowledge_loader is None:
+            logger.warning("TradingKnowledgeLoader not available, skipping update")
+            return
         try:
             logger.info("Updating trading knowledge for all agents...")
             self.trading_knowledge = await self.trading_knowledge_loader.load_trading_knowledge(force_refresh=force_refresh)
