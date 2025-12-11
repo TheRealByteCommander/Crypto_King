@@ -143,26 +143,123 @@ if [ -d "frontend" ]; then
   if command -v yarn >/dev/null 2>&1; then
     echo "[INFO] Aktualisiere Frontend-Dependencies mit yarn ..."
     yarn install --silent || echo -e "${YELLOW}[WARN] yarn install hatte Probleme – bitte Logs prüfen.${NC}"
+    PACKAGE_MANAGER="yarn"
   elif command -v npm >/dev/null 2>&1; then
     echo "[INFO] Aktualisiere Frontend-Dependencies mit npm ..."
     npm install --silent || echo -e "${YELLOW}[WARN] npm install hatte Probleme – bitte Logs prüfen.${NC}"
+    PACKAGE_MANAGER="npm"
   else
     echo -e "${YELLOW}[WARN] Weder yarn noch npm verfügbar – Frontend-Dependencies wurden nicht aktualisiert.${NC}"
+    PACKAGE_MANAGER=""
   fi
 
   cd "${ROOT_DIR}"
 else
   echo -e "${YELLOW}[WARN] frontend/ Verzeichnis nicht gefunden – überspringe Frontend-Update.${NC}"
+  PACKAGE_MANAGER=""
 fi
 
 echo ""
-echo -e "${YELLOW}Step 5: Services neu starten (falls supervisor verfügbar)${NC}"
+echo -e "${YELLOW}Step 5: Frontend Production Build erstellen${NC}"
+
+if [ -d "frontend" ] && [ -n "$PACKAGE_MANAGER" ]; then
+  cd frontend
+  
+  # Prüfe ob Production Build benötigt wird (supervisor läuft)
+  NEED_BUILD=false
+  if command -v supervisorctl >/dev/null 2>&1; then
+    FRONTEND_STATUS=$(sudo supervisorctl status cyphertrade-frontend 2>/dev/null | grep -c "RUNNING" || echo "0")
+    if [ "$FRONTEND_STATUS" = "1" ]; then
+      NEED_BUILD=true
+      echo "[INFO] Frontend läuft über supervisor - Production Build wird erstellt..."
+    else
+      echo "[INFO] Frontend läuft nicht über supervisor - Development-Modus, kein Build nötig"
+    fi
+  else
+    echo "[INFO] supervisorctl nicht verfügbar - prüfe ob build/ Verzeichnis existiert..."
+    if [ -d "build" ]; then
+      NEED_BUILD=true
+      echo "[INFO] build/ Verzeichnis gefunden - Production Build wird aktualisiert..."
+    fi
+  fi
+  
+  if [ "$NEED_BUILD" = true ]; then
+    # Stoppe Frontend während Build
+    if command -v supervisorctl >/dev/null 2>&1; then
+      echo "[INFO] Stoppe Frontend für Build..."
+      sudo supervisorctl stop cyphertrade-frontend 2>/dev/null || true
+      sleep 2
+    fi
+    
+    # Lösche alten Build
+    if [ -d "build" ]; then
+      echo "[INFO] Lösche alten Production Build..."
+      rm -rf build
+      echo -e "${GREEN}[OK] Alter Build gelöscht${NC}"
+    fi
+    
+    # Erstelle neuen Production Build
+    echo "[INFO] Erstelle neuen Production Build (kann einige Minuten dauern)..."
+    if [ "$PACKAGE_MANAGER" = "yarn" ]; then
+      NODE_ENV=production yarn build || {
+        echo -e "${RED}[ERROR] Frontend Build fehlgeschlagen!${NC}"
+        echo "       Bitte Logs prüfen und manuell beheben."
+        cd "${ROOT_DIR}"
+        exit 1
+      }
+    else
+      NODE_ENV=production npm run build || {
+        echo -e "${RED}[ERROR] Frontend Build fehlgeschlagen!${NC}"
+        echo "       Bitte Logs prüfen und manuell beheben."
+        cd "${ROOT_DIR}"
+        exit 1
+      }
+    fi
+    
+    echo -e "${GREEN}[OK] Production Build erfolgreich erstellt${NC}"
+    
+    # Starte Frontend wieder
+    if command -v supervisorctl >/dev/null 2>&1; then
+      echo "[INFO] Starte Frontend wieder..."
+      sudo supervisorctl start cyphertrade-frontend 2>/dev/null || echo -e "${YELLOW}[WARN] Frontend konnte nicht automatisch gestartet werden.${NC}"
+    fi
+  else
+    echo "[INFO] Kein Production Build nötig - Frontend läuft im Development-Modus"
+  fi
+  
+  cd "${ROOT_DIR}"
+else
+  echo -e "${YELLOW}[WARN] Frontend Build übersprungen (kein Package Manager verfügbar)${NC}"
+fi
+
+echo ""
+echo -e "${YELLOW}Step 6: Services neu starten (falls supervisor verfügbar)${NC}"
 if command -v supervisorctl >/dev/null 2>&1; then
   echo "[INFO] Starte Backend neu ..."
   sudo supervisorctl restart cyphertrade-backend || echo -e "${YELLOW}[WARN] Backend konnte nicht über supervisorctl neu gestartet werden.${NC}"
+  
+  # Warte kurz, damit Backend startet
+  sleep 2
 
-  echo "[INFO] Starte Frontend neu ..."
-  sudo supervisorctl restart cyphertrade-frontend || echo -e "${YELLOW}[WARN] Frontend konnte nicht über supervisorctl neu gestartet werden.${NC}"
+  # Frontend nur neu starten, wenn es nicht bereits durch Build-Prozess gestartet wurde
+  FRONTEND_STATUS=$(sudo supervisorctl status cyphertrade-frontend 2>/dev/null | grep -c "RUNNING" || echo "0")
+  if [ "$FRONTEND_STATUS" != "1" ]; then
+    echo "[INFO] Starte Frontend neu ..."
+    sudo supervisorctl restart cyphertrade-frontend || echo -e "${YELLOW}[WARN] Frontend konnte nicht über supervisorctl neu gestartet werden.${NC}"
+  else
+    echo "[INFO] Frontend läuft bereits (wurde nach Build automatisch gestartet)"
+  fi
+  
+  # Warte kurz auf Start
+  sleep 3
+  
+  # Zeige Status
+  echo ""
+  echo "[INFO] Service-Status:"
+  echo "=== Backend ==="
+  sudo supervisorctl status cyphertrade-backend 2>/dev/null || true
+  echo "=== Frontend ==="
+  sudo supervisorctl status cyphertrade-frontend 2>/dev/null || true
 else
   echo -e "${YELLOW}[INFO] supervisorctl nicht gefunden – bitte Backend & Frontend manuell neu starten.${NC}"
 fi
@@ -181,12 +278,16 @@ echo "  - Sicheres Krypto-News-System für NexusChat"
 echo "  - Autonome Bot-Verwaltung & Coin-Analyse für CypherMind"
 echo "  - Grid Trading Strategie"
 echo "  - 24h-basierte Profit/Loss- und Volumen-Statistiken im Dashboard"
+echo "  - Vereinfachtes Dashboard: Nur Profit/Loss (24h), Depot Summe, Total Trades (7 Tage)"
 echo ""
 echo "Hinweise:"
 echo "  - Backend-Dependencies: siehe backend/requirements.txt"
-echo "  - Für Produktions-Builds des Frontends gibt es zusätzliche Skripte wie:"
-echo "      rebuild-frontend-now.sh, reload-frontend-now.sh"
-echo "  - Nach dem Update Browser-Cache ggf. mit Strg+Shift+R leeren."
+echo "  - Frontend wurde neu gebaut - alle Änderungen sind jetzt aktiv"
+echo "  - Nach dem Update Browser-Cache ggf. mit Strg+Shift+R leeren (Hard Refresh)"
+echo "  - Falls Frontend-Änderungen nicht sichtbar sind:"
+echo "    1. Browser-Cache komplett leeren (Strg+Shift+Delete)"
+echo "    2. Service Worker deaktivieren (F12 → Application → Service Workers → Unregister)"
+echo "    3. Hard Refresh: Strg+Shift+R"
 echo ""
 if [ "$HAD_LOCAL_CHANGES" = "1" ]; then
   echo -e "${YELLOW}⚠ WICHTIG: Lokale Änderungen wurden gestasht!${NC}"
