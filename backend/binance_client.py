@@ -243,12 +243,6 @@ class BinanceClientWrapper:
             if not order.get('fills') and not order.get('price') and not order.get('cummulativeQuoteQty'):
                 logger.warning(f"Order response incomplete for {order_id}, will fetch full details if needed")
                 # Nicht hier warten - wird später in _get_execution_price_from_order gemacht falls nötig
-                    
-                    # Merge vollständige Daten mit ursprünglicher Antwort
-                    order.update(full_order)
-                    logger.info(f"Retrieved full order details for {order_id}")
-                except Exception as fetch_error:
-                    logger.warning(f"Could not fetch full order details: {fetch_error}. Using original order response.")
             
             # Gebe vollständige Order-Daten zurück (inkl. fills, price, etc.)
             return {
