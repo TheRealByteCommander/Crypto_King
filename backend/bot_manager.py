@@ -1182,7 +1182,7 @@ class TradingBot:
         """
         Berechnet execution_price aus Order-Daten.
         
-        KRITISCH: Wirft ValueError wenn execution_price nicht verfügbar ist - kein Fallback!
+        KRITISCH: Wenn Daten fehlen, wird versucht, die vollständigen Order-Daten von Binance abzurufen!
         
         Args:
             order: Order-Dict von Binance API
@@ -1193,7 +1193,7 @@ class TradingBot:
             execution_price als float
         
         Raises:
-            ValueError: Wenn execution_price nicht berechnet werden kann
+            ValueError: Wenn execution_price nicht berechnet werden kann, auch nach Abruf der vollständigen Daten
         """
         execution_price = None
         
@@ -1221,6 +1221,38 @@ class TradingBot:
         if (execution_price is None or execution_price <= 0) and order.get("price"):
             execution_price = float(order.get("price"))
         
+        # 4. KRITISCH: Wenn execution_price immer noch nicht verfügbar, hole vollständige Order-Daten von Binance!
+        if execution_price is None or execution_price <= 0:
+            order_id = order.get('orderId')
+            if order_id and self.binance_client:
+                logger.warning(f"Bot {self.bot_id}: Order-Daten unvollständig für Order {order_id}, hole vollständige Daten von Binance...")
+                try:
+                    trading_mode = self.current_config.get("trading_mode", "SPOT") if self.current_config else "SPOT"
+                    full_order = self.binance_client.get_order_status(symbol, order_id, trading_mode)
+                    
+                    # Versuche erneut mit vollständigen Daten
+                    if full_order.get("fills"):
+                        fills = full_order.get("fills", [])
+                        if fills:
+                            total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                            total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                            if total_qty > 0 and total_quote > 0:
+                                execution_price = total_quote / total_qty
+                    
+                    if (execution_price is None or execution_price <= 0) and full_order.get("cummulativeQuoteQty") and full_order.get("executedQty"):
+                        executed_qty = float(full_order.get("executedQty", 0))
+                        if executed_qty > 0:
+                            execution_price = float(full_order.get("cummulativeQuoteQty")) / executed_qty
+                    
+                    if (execution_price is None or execution_price <= 0) and full_order.get("price"):
+                        execution_price = float(full_order.get("price"))
+                    
+                    if execution_price and execution_price > 0:
+                        logger.info(f"Bot {self.bot_id}: Execution price erfolgreich aus vollständigen Order-Daten berechnet: {execution_price}")
+                        return execution_price
+                except Exception as fetch_error:
+                    logger.error(f"Bot {self.bot_id}: Fehler beim Abrufen vollständiger Order-Daten: {fetch_error}")
+        
         # KRITISCH: Wenn execution_price immer noch nicht verfügbar, Fehler werfen!
         if execution_price is None or execution_price <= 0:
             error_msg = (
@@ -1229,7 +1261,8 @@ class TradingBot:
                 f"price={order.get('price')}, "
                 f"cummulativeQuoteQty={order.get('cummulativeQuoteQty')}, "
                 f"executedQty={order.get('executedQty')}, "
-                f"current_price={current_price}"
+                f"current_price={current_price}. "
+                f"Vollständige Order-Daten konnten nicht abgerufen werden."
             )
             logger.error(f"Bot {self.bot_id}: {error_msg}")
             raise ValueError(error_msg)

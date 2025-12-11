@@ -233,13 +233,49 @@ class BinanceClientWrapper:
             else:
                 raise ValueError(f"Unsupported trading mode: {trading_mode}")
             
-            logger.info(f"Order executed successfully: {order.get('orderId', order.get('order_id', 'N/A'))}")
+            order_id = order.get('orderId') or order.get('order_id')
+            logger.info(f"Order executed successfully: {order_id}")
+            
+            # KRITISCH: Stelle sicher, dass alle notwendigen Daten vorhanden sind
+            # Falls die Order-Antwort unvollständig ist, hole die vollständigen Daten nach
+            if not order.get('fills') and not order.get('price') and not order.get('cummulativeQuoteQty'):
+                logger.warning(f"Order response incomplete, fetching full order details for {order_id}")
+                try:
+                    # Hole vollständige Order-Daten nach kurzer Wartezeit (Order muss verarbeitet werden)
+                    import time
+                    time.sleep(0.5)  # Kurz warten, damit Order verarbeitet wird
+                    
+                    if trading_mode == "SPOT":
+                        full_order = self.client.get_order(symbol=symbol, orderId=order_id)
+                    elif trading_mode == "MARGIN":
+                        full_order = self.client.get_margin_order(symbol=symbol, orderId=order_id)
+                    elif trading_mode == "FUTURES":
+                        full_order = self.client.futures_get_order(symbol=symbol, orderId=order_id)
+                    else:
+                        full_order = order
+                    
+                    # Merge vollständige Daten mit ursprünglicher Antwort
+                    order.update(full_order)
+                    logger.info(f"Retrieved full order details for {order_id}")
+                except Exception as fetch_error:
+                    logger.warning(f"Could not fetch full order details: {fetch_error}. Using original order response.")
+            
+            # Gebe vollständige Order-Daten zurück (inkl. fills, price, etc.)
             return {
-                "orderId": order.get('orderId') or order.get('order_id'),
-                "status": order.get('status', order.get('status')),
+                "orderId": order_id,
+                "status": order.get('status', ''),
                 "executedQty": float(order.get('executedQty', order.get('executedQty', 0))),
-                "cummulativeQuoteQty": float(order.get('cummulativeQuoteQty', order.get('cumQuote', 0))),
-                "transactTime": order.get('transactTime', order.get('updateTime', 0))
+                "cummulativeQuoteQty": float(order.get('cummulativeQuoteQty', order.get('cumQuote', order.get('cumulativeQuoteQty', 0)))),
+                "transactTime": order.get('transactTime', order.get('updateTime', order.get('time', 0))),
+                "price": order.get('price'),  # WICHTIG: Preis-Feld zurückgeben
+                "fills": order.get('fills', []),  # WICHTIG: Fills-Array zurückgeben
+                "clientOrderId": order.get('clientOrderId', ''),
+                "timeInForce": order.get('timeInForce', ''),
+                "type": order.get('type', ''),
+                "side": order.get('side', ''),
+                "symbol": order.get('symbol', symbol),
+                # Gebe auch die vollständige Order-Antwort zurück für Debugging
+                "_raw_order": order
             }
         
         except BinanceAPIException as e:
