@@ -244,15 +244,6 @@ class BinanceClientWrapper:
                 logger.warning(f"Order response incomplete for {order_id}, will fetch full details if needed")
                 # Nicht hier warten - wird später in _get_execution_price_from_order gemacht falls nötig
                     
-                    if trading_mode == "SPOT":
-                        full_order = self.client.get_order(symbol=symbol, orderId=order_id)
-                    elif trading_mode == "MARGIN":
-                        full_order = self.client.get_margin_order(symbol=symbol, orderId=order_id)
-                    elif trading_mode == "FUTURES":
-                        full_order = self.client.futures_get_order(symbol=symbol, orderId=order_id)
-                    else:
-                        full_order = order
-                    
                     # Merge vollständige Daten mit ursprünglicher Antwort
                     order.update(full_order)
                     logger.info(f"Retrieved full order details for {order_id}")
