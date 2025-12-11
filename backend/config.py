@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     nexuschat_base_url: str = "http://localhost:11434/v1"
     
     # CypherMind Agent LLM Configuration
+    # Optimiert für DeepSeek-R1:32b (größeres Modell mit längeren Antwortzeiten)
     cyphermind_llm_provider: str = "ollama"
-    cyphermind_model: str = "llama3.2"
+    cyphermind_model: str = "deepseek-r1:32b"  # DeepSeek-R1:32b für bessere Analysen
     cyphermind_base_url: str = "http://localhost:11434/v1"
     
     # CypherTrade Agent LLM Configuration

@@ -72,13 +72,14 @@ system_message: |
   JSON: {"action": "BUY", "symbol": "BTCUSDT", "quantity": 0.01, "reason": "...", "confidence": 0.85}
 
 # LLM Parameters
+# Optimiert für DeepSeek-R1:32b (größeres Modell mit längeren Antwortzeiten)
 temperature: 0.5  # Lower temperature for more deterministic decisions
-max_tokens: 2000
-timeout: 120
+max_tokens: 4000  # Erhöht für längere, detailliertere Analysen (DeepSeek-R1 kann längere Antworten generieren)
+timeout: 300  # Erhöht auf 5 Minuten für DeepSeek-R1:32b (größeres Modell braucht mehr Zeit)
 
 # Behavior Settings
 verbose: true
-autoreply_max_consecutive: 15
+autoreply_max_consecutive: 20  # Erhöht für DeepSeek-R1:32b (mehr Turns für komplexe Analysen)
 
 # Strategy Parameters (can be adjusted without code changes)
 strategy_params:

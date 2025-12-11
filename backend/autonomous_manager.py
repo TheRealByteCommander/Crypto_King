@@ -330,7 +330,7 @@ class AutonomousManager:
                         result = user_proxy.initiate_chat(
                             recipient=cyphermind,
                             message=context_message,
-                            max_turns=15,  # Mehr Turns für mehrere Bot-Starts
+                            max_turns=20,  # Erhöht für DeepSeek-R1:32b (mehr Turns für komplexe Analysen und Bot-Starts)
                             clear_history=False,
                             silent=False  # Zeige alle Nachrichten für Debugging
                         )

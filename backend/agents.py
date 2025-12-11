@@ -243,7 +243,7 @@ class AgentManager:
             name="UserProxy",
             system_message="Facilitate communication between agents and user.",
             human_input_mode="NEVER",
-            max_consecutive_auto_reply=10,
+            max_consecutive_auto_reply=25,  # Erhöht für DeepSeek-R1:32b (mehr Turns für komplexe Analysen)
             code_execution_config=False,
         )
         logger.info("✓ UserProxy initialized")
