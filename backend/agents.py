@@ -90,8 +90,13 @@ class AgentManager:
                 "base_url": base_url,
             }],
             "temperature": config.get("temperature", 0.7),
-            "timeout": config.get("timeout", 120),
+            "timeout": config.get("timeout", 120),  # Timeout wird aus YAML geladen (für CypherMind: 300s für DeepSeek-R1:32b)
         }
+        
+        # Add max_tokens if specified in config (für längere Antworten bei größeren Modellen wie DeepSeek-R1:32b)
+        max_tokens = config.get("max_tokens")
+        if max_tokens:
+            llm_config["max_tokens"] = max_tokens
         
         # Add functions/tools if available (for models that support function calling)
         # Note: Ollama may not support function calling in all models, but we provide it anyway
