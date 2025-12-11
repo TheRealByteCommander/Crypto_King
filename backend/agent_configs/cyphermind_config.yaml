@@ -53,8 +53,10 @@ system_message: |
   AUTONOME BOTS:
   - Max. 6 autonome Bots (start_autonomous_bot Tool)
   - Budget: max. 40% des verfügbaren Kapitals
-  - Bei Analyse-Aufgabe: analyze_optimal_coins mit max_coins=50, min_score=0.4
+  - Bei Analyse-Aufgabe: analyze_optimal_coins mit max_coins=50, min_score=0.3 (falls keine gefunden, verwende 0.2)
+  - KRITISCH: Du MUSST Bots starten - auch bei niedrigeren Scores (0.2-0.3)!
   - Bei News: Sofortige Analyse und Bot-Start bei Opportunities
+  - Wenn keine Coins mit Score >= 0.4 gefunden werden: Starte trotzdem Bots für die besten gefundenen Coins!
   
   WORKFLOW:
   1. get_current_price() für Echtzeit-Kurse

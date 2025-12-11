@@ -99,8 +99,9 @@ class AgentMemory:
                 "strategy": trade.get("strategy"),
                 "entry_price": trade.get("entry_price"),
                 "exit_price": trade.get("exit_price"),
-                "outcome": outcome,  # "success", "failure", "neutral"
+                "outcome": outcome,  # "success", "failure", "neutral", "high_success" (≥2% profit)
                 "profit_loss": profit_loss,
+                "profit_loss_percent": trade.get("pnl_percent"),  # Profit percentage for reward system
                 "indicators_at_entry": trade.get("indicators", {}),
                 "signal_confidence": trade.get("confidence", 0.0),
                 "execution_delay_seconds": execution_delay,  # Delay between decision and execution
@@ -124,7 +125,13 @@ class AgentMemory:
             await self.store_memory(
                 memory_type="trade_learning",
                 content=learning_entry,
-                metadata={"outcome": outcome, "profit_loss": profit_loss}
+                metadata={
+                    "outcome": outcome, 
+                    "profit_loss": profit_loss,
+                    "profit_loss_percent": trade.get("pnl_percent"),
+                    "rewarded": outcome == "high_success",  # Mark if trade was rewarded (≥2% profit)
+                    "low_profit_warning": outcome == "low_profit"  # Mark if trade had negative evaluation (<1% profit)
+                }
             )
             
             logger.info(f"{self.agent_name} learned from trade: {outcome}")
@@ -138,8 +145,33 @@ class AgentMemory:
         
         strategy = trade.get("strategy", "unknown")
         confidence = trade.get("confidence", 0.0)
+        pnl_percent = trade.get("pnl_percent")  # Get profit percentage for reward system
         
-        if outcome == "success":
+        # BELOHNUNGSSYSTEM: Spezielle Behandlung für Trades mit ≥2% Profit
+        if outcome == "high_success":
+            # Trade hat mindestens 2% Profit gemacht - Belohnung für Agents!
+            lessons.append(f"🎯 BELOHNUNG: Trade mit {pnl_percent:.2f}% Profit erfolgreich! Strategy '{strategy}' hat ausgezeichnet funktioniert.")
+            lessons.append(f"Strategy '{strategy}' mit Confidence {confidence:.2f} führte zu ≥2% Profit - diese Bedingungen waren optimal!")
+            if pnl_percent and pnl_percent >= 5.0:
+                lessons.append(f"⭐ AUSGEZEICHNET: {pnl_percent:.2f}% Profit - sehr profitable Strategie!")
+            elif pnl_percent and pnl_percent >= 3.0:
+                lessons.append(f"✅ SEHR GUT: {pnl_percent:.2f}% Profit - Strategie hat stark performt!")
+            else:
+                lessons.append(f"✅ GUT: {pnl_percent:.2f}% Profit - Mindestziel erreicht!")
+            # Belohnung: Diese Strategie und Bedingungen sollten bevorzugt werden
+            lessons.append(f"BELOHNUNG: Ähnliche Marktbedingungen und Strategie '{strategy}' sollten bevorzugt werden für zukünftige Trades.")
+        elif outcome == "low_profit":
+            # NEGATIVE BEWERTUNG: Trade hat Profit, aber <1% - Agents sollen auf Limits achten lernen
+            lessons.append(f"⚠️ NEGATIVE BEWERTUNG: Trade mit nur {pnl_percent:.2f}% Profit verkauft - zu früh verkauft!")
+            lessons.append(f"❌ FEHLER: Mindestziel von 2% Profit wurde NICHT erreicht. Trade wurde bei {pnl_percent:.2f}% verkauft.")
+            lessons.append(f"WARNUNG: Strategy '{strategy}' mit Confidence {confidence:.2f} führte zu unzureichendem Profit (<1%).")
+            # Agents sollen lernen, auf Limits zu achten
+            lessons.append(f"LERNEN: Trade hätte länger gehalten werden müssen, um das Mindestziel von 2% Profit zu erreichen.")
+            lessons.append(f"LERNEN: System-Limit von 2% Minimum-Profit beachten - Verkauf bei <1% Profit vermeiden!")
+            # Was nicht funktioniert hat
+            lessons.append(f"WAS NICHT FUNKTIONIERT: Zu früher Verkauf bei {pnl_percent:.2f}% Profit. Position sollte bis mindestens 2% gehalten werden.")
+            lessons.append(f"VERBESSERUNG: Bei ähnlichen Bedingungen länger halten oder auf bessere Exit-Signale warten.")
+        elif outcome == "success":
             lessons.append(f"Strategy '{strategy}' worked well with confidence {confidence:.2f}")
             if profit_loss > 5:
                 lessons.append(f"High profit trade - similar conditions may be favorable")

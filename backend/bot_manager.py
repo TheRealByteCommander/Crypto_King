@@ -16,7 +16,8 @@ from constants import (
     QUANTITY_DECIMAL_PLACES,
     STOP_LOSS_PERCENT,
     TAKE_PROFIT_MIN_PERCENT,
-    TAKE_PROFIT_TRAILING_PERCENT
+    TAKE_PROFIT_TRAILING_PERCENT,
+    LOW_PROFIT_THRESHOLD
 )
 import json
 
@@ -953,9 +954,22 @@ class TradingBot:
     async def _learn_from_closed_position(self, trade: Dict[str, Any], pnl: float, entry_price: float, exit_price: float):
         """Learn from a closed position - called for all relevant agents."""
         try:
-            # Determine outcome based on P&L
-            # Reduced threshold to enable more learning opportunities
-            if pnl > MIN_PROFIT_LOSS_THRESHOLD:
+            # Extract pnl_percent from trade dict (if available)
+            pnl_percent = trade.get("pnl_percent")
+            
+            # Calculate pnl_percent if not available in trade dict
+            if pnl_percent is None and entry_price > 0:
+                pnl_percent = ((exit_price - entry_price) / entry_price) * 100
+            
+            # Determine outcome based on P&L (both absolute and percentage)
+            # BELOHNUNGSSYSTEM: Trades mit ≥2% Profit werden als "high_success" markiert
+            if pnl_percent is not None and pnl_percent >= TAKE_PROFIT_MIN_PERCENT:
+                # Trade hat mindestens 2% Profit gemacht - Belohnung für Agents!
+                outcome = "high_success"  # Spezieller Outcome für profitable Trades ≥2%
+            elif pnl_percent is not None and pnl_percent > 0 and pnl_percent < LOW_PROFIT_THRESHOLD:
+                # NEGATIVE BEWERTUNG: Trade hat Profit, aber <1% - Agents sollen auf Limits achten lernen
+                outcome = "low_profit"  # Profitabel, aber zu niedrig - negative Bewertung
+            elif pnl > MIN_PROFIT_LOSS_THRESHOLD:
                 outcome = "success"
             elif pnl < -MIN_PROFIT_LOSS_THRESHOLD:
                 outcome = "failure"
@@ -979,7 +993,8 @@ class TradingBot:
                 "exit_price": exit_price,
                 "confidence": trade.get("confidence", 0.0),
                 "indicators": trade.get("indicators", {}),
-                "bot_id": self.bot_id
+                "bot_id": self.bot_id,
+                "pnl_percent": pnl_percent  # Include pnl_percent for reward system
             }
             
             # Get candle data for learning (if available)
@@ -1054,18 +1069,21 @@ class TradingBot:
             # Learn for CypherMind (decision maker) - with candle data
             cyphermind_memory = self.agent_manager.memory_manager.get_agent_memory("CypherMind")
             await cyphermind_memory.learn_from_trade(learning_trade, outcome, pnl, candle_data)
-            logger.info(f"Bot {self.bot_id}: CypherMind learned from trade: {outcome} (P&L: {pnl:.2f} USDT)" + (" - with candle patterns" if candle_data else ""))
+            pnl_percent_msg = f", {pnl_percent:+.2f}%" if pnl_percent is not None else ""
+            reward_msg = " 🎯 BELOHNUNG: ≥2% Profit!" if outcome == "high_success" else ""
+            warning_msg = " ⚠️ NEGATIVE BEWERTUNG: <1% Profit!" if outcome == "low_profit" else ""
+            logger.info(f"Bot {self.bot_id}: CypherMind learned from trade: {outcome} (P&L: {pnl:.2f} USDT{pnl_percent_msg}){reward_msg}{warning_msg}" + (" - with candle patterns" if candle_data else ""))
             
             # Learn for CypherTrade (executor) - with candle data
             cyphertrade_memory = self.agent_manager.memory_manager.get_agent_memory("CypherTrade")
             await cyphertrade_memory.learn_from_trade(learning_trade, outcome, pnl, candle_data)
-            logger.info(f"Bot {self.bot_id}: CypherTrade learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
+            logger.info(f"Bot {self.bot_id}: CypherTrade learned from trade: {outcome} (P&L: {pnl:.2f} USDT{pnl_percent_msg}){reward_msg}{warning_msg}")
             
             # Learn for NexusChat (UI agent) - learns from trade outcomes and user interactions
             # NexusChat learns from successful/failed trades to improve communication and trade confirmation accuracy
             nexuschat_memory = self.agent_manager.memory_manager.get_agent_memory("NexusChat")
             await nexuschat_memory.learn_from_trade(learning_trade, outcome, pnl, candle_data)
-            logger.info(f"Bot {self.bot_id}: NexusChat learned from trade: {outcome} (P&L: {pnl:.2f} USDT)")
+            logger.info(f"Bot {self.bot_id}: NexusChat learned from trade: {outcome} (P&L: {pnl:.2f} USDT{pnl_percent_msg}){reward_msg}{warning_msg}")
             
             # Store collective memory about trade outcome
             await self.agent_manager.memory_manager.store_collective_memory(
@@ -1075,7 +1093,10 @@ class TradingBot:
                     "strategy": trade.get("strategy", ""),
                     "outcome": outcome,
                     "profit_loss": pnl,
-                    "bot_id": self.bot_id
+                    "profit_loss_percent": pnl_percent,
+                    "bot_id": self.bot_id,
+                    "rewarded": outcome == "high_success",  # Mark if trade was rewarded (≥2% profit)
+                    "low_profit_warning": outcome == "low_profit"  # Mark if trade had negative evaluation (<1% profit)
                 }
             )
             

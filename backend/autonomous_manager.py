@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Constants
 AUTONOMOUS_ANALYSIS_INTERVAL_SECONDS = 1800  # 30 Minuten - permanente Überprüfung
 NEWS_FETCH_INTERVAL_SECONDS = 1800  # 30 Minuten
-MIN_COIN_SCORE_FOR_BOT_START = 0.4  # Mindest-Score für Bot-Start
+MIN_COIN_SCORE_FOR_BOT_START = 0.2  # Mindest-Score für Bot-Start (reduziert von 0.4 auf 0.2, damit mehr Bots gestartet werden)
 MAX_AUTONOMOUS_BOTS = 6  # Key-Feature: Bis zu 6 autonome Bots
 BOT_PERFORMANCE_CHECK_INTERVAL_SECONDS = 3600  # 1 Stunde - Performance-Check
 BOT_MIN_RUNTIME_HOURS = 24  # Mindest-Laufzeit vor Performance-Check
@@ -274,21 +274,24 @@ class AutonomousManager:
             # Erstelle klare, direkte Anweisung für CypherMind
             context_message = (
                 "🚀 AUTONOME ANALYSE-AUFGABE - SOFORT AUSFÜHREN:\n\n"
-                f"Status: {len(autonomous_bots)}/{MAX_AUTONOMOUS_BOTS} autonome Bots laufen. Du kannst noch {remaining_slots} Bots starten.\n\n"
-                "KRITISCH - DU MUSST JETZT HANDELN:\n"
+                f"Status: {len(autonomous_bots)}/{MAX_AUTONOMOUS_BOTS} autonome Bots laufen. Du MUSST noch {remaining_slots} Bots starten!\n\n"
+                "KRITISCH - DU MUSST JETZT HANDELN UND BOTS STARTEN:\n"
                 "1. Rufe SOFORT das Tool 'analyze_optimal_coins' auf mit:\n"
                 "   - max_coins=50 (analysiere viele Coins!)\n"
-                "   - min_score=0.4 (nur gute Opportunities)\n"
+                "   - min_score=0.3 (starte mit 0.3, falls keine mit 0.4 gefunden werden, verwende 0.2)\n"
                 "   - exclude_symbols=[] (prüfe alle verfügbaren Paare)\n\n"
-                f"2. Wenn Coins mit Score >= 0.4 gefunden werden:\n"
-                f"   - Rufe SOFORT 'start_autonomous_bot' für die besten Coins auf\n"
+                f"2. WICHTIG - DU MUSST BOTS STARTEN:\n"
+                f"   - Wenn Coins mit Score >= 0.4 gefunden werden: Starte SOFORT 'start_autonomous_bot' für die TOP {remaining_slots} Coins!\n"
+                f"   - Wenn KEINE Coins mit Score >= 0.4 gefunden werden: Starte trotzdem Bots für die BESTEN gefundenen Coins (auch bei Score 0.3 oder 0.2)!\n"
+                f"   - DU MUSST MINDESTENS 1 BOT STARTEN - auch wenn der Score niedrig ist!\n"
                 f"   - Wähle die beste Strategie basierend auf der Analyse\n"
                 f"   - Starte bis zu {remaining_slots} Bots für maximale Profit-Chancen\n\n"
-                "3. WICHTIG:\n"
+                "3. KRITISCH - KEINE DISKUSSION:\n"
                 "   - Verwende die Tools DIREKT - keine Diskussion, direkt ausführen!\n"
                 "   - Budget wird automatisch berechnet\n"
-                "   - Ziel: Maximaler Profit durch optimale Coin-Auswahl\n\n"
-                f"BEGINNE JETZT MIT DER ANALYSE - Rufe analyze_optimal_coins auf! Du kannst noch {remaining_slots} Bots starten!"
+                "   - Ziel: BOTS STARTEN - auch bei niedrigeren Scores!\n"
+                "   - Wenn keine Coins gefunden werden, analysiere mit min_score=0.2 und starte trotzdem Bots!\n\n"
+                f"BEGINNE JETZT: Rufe analyze_optimal_coins auf, dann starte SOFORT {remaining_slots} Bots mit start_autonomous_bot!"
             )
             
             # Verwende initiate_chat statt send() für bessere Tool-Aufrufe
