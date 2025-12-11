@@ -23,9 +23,22 @@ class AgentManager:
         self.agent_configs = {}
         self.current_position = None
         self.capital = settings.default_amount
-        self.memory_manager = MemoryManager(db)
-        # Initialize trading knowledge loader
-        self.trading_knowledge_loader = TradingKnowledgeLoader(db)
+        
+        # WICHTIG: Initialisierung darf nicht fehlschlagen, wenn db None ist
+        try:
+            if db is not None:
+                self.memory_manager = MemoryManager(db)
+                # Initialize trading knowledge loader
+                self.trading_knowledge_loader = TradingKnowledgeLoader(db)
+            else:
+                self.memory_manager = None
+                self.trading_knowledge_loader = None
+                logger.warning("MemoryManager and TradingKnowledgeLoader not initialized (db is None)")
+        except Exception as e:
+            logger.error(f"Failed to initialize MemoryManager/TradingKnowledgeLoader: {e}", exc_info=True)
+            self.memory_manager = None
+            self.trading_knowledge_loader = None
+        
         self.trading_knowledge = None  # Will be loaded on first access
         # Initialize agent tools
         self.agent_tools = AgentTools(bot=bot, binance_client=binance_client, db=db)
@@ -116,6 +129,8 @@ class AgentManager:
     
     async def _enrich_system_message_with_trading_knowledge(self, agent_name: str, base_message: str) -> str:
         """Enrich agent system message with trading knowledge."""
+        if self.trading_knowledge_loader is None:
+            return base_message
         try:
             # Load trading knowledge if not already loaded
             if self.trading_knowledge is None:

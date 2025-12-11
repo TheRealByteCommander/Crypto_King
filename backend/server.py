@@ -86,13 +86,26 @@ app.add_middleware(
 api_router = APIRouter(prefix="/api")
 
 # Initialize agents and bot manager
-# Initialize agent_manager first, then bot_manager
-agent_manager = AgentManager(db, bot=None, binance_client=None)
-bot_manager = BotManager(db, agent_manager)
-# Update agent_manager with bot_manager reference
-agent_manager.bot = bot_manager
-# For backward compatibility, create a default bot instance
-default_bot = bot_manager.get_bot()
+# WICHTIG: Initialisierung darf nicht fehlschlagen, wenn DB nicht verfügbar ist
+agent_manager = None
+bot_manager = None
+default_bot = None
+
+try:
+    if db is not None:
+        # Initialize agent_manager first, then bot_manager
+        agent_manager = AgentManager(db, bot=None, binance_client=None)
+        bot_manager = BotManager(db, agent_manager)
+        # Update agent_manager with bot_manager reference
+        agent_manager.bot = bot_manager
+        # For backward compatibility, create a default bot instance
+        default_bot = bot_manager.get_bot()
+        logger.info("AgentManager and BotManager initialized successfully")
+    else:
+        logger.warning("DB not available during import - managers will be initialized on startup")
+except Exception as e:
+    logger.error(f"Failed to initialize AgentManager/BotManager during import: {e}", exc_info=True)
+    logger.warning("Managers will be initialized on startup")
 
 # Initialize MCP Server if enabled
 # WICHTIG: MCP Server Initialisierung darf Import nicht blockieren
