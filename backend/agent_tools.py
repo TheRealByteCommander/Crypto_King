@@ -1083,19 +1083,41 @@ class AgentTools:
                     if calculated_budget < 10.0:
                         calculated_budget = 10.0
                     
-                    # Create new bot
+                    # Create new bot (always create new one for autonomous bots)
                     new_bot = self.bot.get_bot()
                     
-                    # Mark as started by CypherMind
+                    # CRITICAL: Check if bot is already running
+                    if new_bot.is_running:
+                        logger.warning(f"Bot {new_bot.bot_id} is already running, creating new bot instance")
+                        # Create a new bot with a new ID
+                        new_bot = self.bot.get_bot()
+                    
+                    # Mark as started by CypherMind BEFORE starting
                     if new_bot.current_config is None:
                         new_bot.current_config = {}
                     new_bot.current_config["started_by"] = "CypherMind"
                     new_bot.current_config["autonomous"] = True
                     
+                    # CRITICAL: Double-check bot is not running before starting
+                    if new_bot.is_running:
+                        return {
+                            "success": False,
+                            "error": f"Bot {new_bot.bot_id} is already running. Cannot start autonomous bot."
+                        }
+                    
                     # Start bot
+                    logger.info(f"Attempting to start autonomous bot: symbol={symbol}, strategy={strategy}, budget={calculated_budget}")
                     result = await new_bot.start(strategy, symbol, calculated_budget, timeframe, trading_mode)
                     
                     if result.get("success"):
+                        # Verify bot is actually running
+                        if not new_bot.is_running:
+                            logger.error(f"Bot {new_bot.bot_id} start() returned success but bot is not running!")
+                            return {
+                                "success": False,
+                                "error": "Bot start reported success but bot is not actually running"
+                            }
+                        
                         # Update config in database with autonomous flags
                         update_data = {
                             "started_by": "CypherMind",
@@ -1117,7 +1139,16 @@ class AgentTools:
                         if new_bot.current_config:
                             new_bot.current_config.update(update_data)
                         
-                        logger.info(f"CypherMind started autonomous bot: {new_bot.bot_id} for {symbol} with budget {calculated_budget} USDT")
+                        # Verify bot is in database
+                        db_bot = await self.db.bot_config.find_one({"bot_id": new_bot.bot_id})
+                        if not db_bot:
+                            logger.error(f"Bot {new_bot.bot_id} not found in database after start!")
+                            return {
+                                "success": False,
+                                "error": "Bot was started but not found in database"
+                            }
+                        
+                        logger.info(f"✅ CypherMind successfully started autonomous bot: {new_bot.bot_id} for {symbol} with budget {calculated_budget} USDT (is_running={new_bot.is_running}, in_db={db_bot is not None})")
                         
                         return {
                             "success": True,
@@ -1128,9 +1159,11 @@ class AgentTools:
                             "message": f"Autonomous bot started successfully with budget {calculated_budget:.2f} USDT (avg: {avg_budget:.2f}, max 40%: {max_budget_from_capital:.2f})"
                         }
                     else:
+                        error_msg = result.get("message", "Failed to start bot")
+                        logger.error(f"❌ Failed to start autonomous bot: {error_msg}")
                         return {
                             "success": False,
-                            "error": result.get("message", "Failed to start bot")
+                            "error": error_msg
                         }
                 
                 except Exception as e:
