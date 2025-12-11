@@ -235,17 +235,46 @@ fi
 echo ""
 echo -e "${YELLOW}Step 6: Services neu starten (falls supervisor verfügbar)${NC}"
 if command -v supervisorctl >/dev/null 2>&1; then
-  echo "[INFO] Starte Backend neu ..."
-  sudo supervisorctl restart cyphertrade-backend || echo -e "${YELLOW}[WARN] Backend konnte nicht über supervisorctl neu gestartet werden.${NC}"
+  # Prüfe ob Backend-Verzeichnis und Python vorhanden sind (verhindert spawn errors)
+  BACKEND_DIR="${ROOT_DIR}/backend"
+  if [ -d "$BACKEND_DIR" ] && [ -f "$BACKEND_DIR/venv/bin/python" ]; then
+    echo "[INFO] Prüfe Backend-Konfiguration vor Neustart..."
+    
+    # Stoppe Backend zuerst
+    echo "[INFO] Stoppe Backend..."
+    sudo supervisorctl stop cyphertrade-backend 2>&1 | grep -vE "(pkg_resources|deprecated|UserWarning)" || true
+    sleep 2
+    
+    # Prüfe ob Port frei ist
+    if lsof -i :8001 > /dev/null 2>&1; then
+      echo "[WARN] Port 8001 noch belegt, beende Prozesse..."
+      lsof -ti :8001 | xargs kill -9 2>/dev/null || true
+      sleep 2
+    fi
+    
+    # Starte Backend
+    echo "[INFO] Starte Backend neu ..."
+    sudo supervisorctl start cyphertrade-backend 2>&1 | grep -vE "(pkg_resources|deprecated|UserWarning)" || {
+      echo -e "${RED}[ERROR] Backend konnte nicht gestartet werden - möglicher Spawn Error!${NC}"
+      echo "[INFO] Führe fix-spawn-error-complete.sh aus um das Problem zu beheben"
+    }
+  else
+    echo -e "${RED}[ERROR] Backend-Verzeichnis oder Python nicht gefunden - kann nicht starten${NC}"
+    echo "[INFO] Erwartete Pfade:"
+    echo "  Backend: $BACKEND_DIR"
+    echo "  Python: $BACKEND_DIR/venv/bin/python"
+  fi
   
   # Warte kurz, damit Backend startet
-  sleep 2
+  sleep 3
 
   # Frontend nur neu starten, wenn es nicht bereits durch Build-Prozess gestartet wurde
   FRONTEND_STATUS=$(sudo supervisorctl status cyphertrade-frontend 2>/dev/null | grep -c "RUNNING" || echo "0")
   if [ "$FRONTEND_STATUS" != "1" ]; then
     echo "[INFO] Starte Frontend neu ..."
-    sudo supervisorctl restart cyphertrade-frontend || echo -e "${YELLOW}[WARN] Frontend konnte nicht über supervisorctl neu gestartet werden.${NC}"
+    sudo supervisorctl restart cyphertrade-frontend 2>&1 | grep -vE "(pkg_resources|deprecated|UserWarning)" || {
+      echo -e "${YELLOW}[WARN] Frontend konnte nicht über supervisorctl neu gestartet werden.${NC}"
+    }
   else
     echo "[INFO] Frontend läuft bereits (wurde nach Build automatisch gestartet)"
   fi
@@ -257,9 +286,17 @@ if command -v supervisorctl >/dev/null 2>&1; then
   echo ""
   echo "[INFO] Service-Status:"
   echo "=== Backend ==="
-  sudo supervisorctl status cyphertrade-backend 2>/dev/null || true
+  BACKEND_STATUS=$(sudo supervisorctl status cyphertrade-backend 2>/dev/null | grep -vE "(pkg_resources|deprecated|UserWarning)" || echo "ERROR")
+  echo "$BACKEND_STATUS"
+  
+  # Prüfe auf Spawn Error
+  if echo "$BACKEND_STATUS" | grep -qi "spawn\|FATAL\|EXITED"; then
+    echo -e "${RED}[ERROR] Backend hat einen Spawn Error!${NC}"
+    echo "[INFO] Führe aus: bash fix-spawn-error-complete.sh"
+  fi
+  
   echo "=== Frontend ==="
-  sudo supervisorctl status cyphertrade-frontend 2>/dev/null || true
+  sudo supervisorctl status cyphertrade-frontend 2>/dev/null | grep -vE "(pkg_resources|deprecated|UserWarning)" || true
 else
   echo -e "${YELLOW}[INFO] supervisorctl nicht gefunden – bitte Backend & Frontend manuell neu starten.${NC}"
 fi
