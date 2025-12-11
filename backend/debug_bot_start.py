@@ -143,7 +143,7 @@ async def check_ollama():
                 return False
     except Exception as e:
         print(f"❌ Ollama nicht erreichbar: {e}")
-        print("   Prüfe ob Ollama läuft: curl http://localhost:11434/api/tags")
+        print("   Prüfe ob Ollama läuft: curl http://192.168.178.155:11434/api/tags")
         return False
 
 async def check_strategies():

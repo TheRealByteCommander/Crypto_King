@@ -14,8 +14,8 @@ import sys
 from typing import List, Dict, Any
 from datetime import datetime
 
-# Ollama API Base URL (Standard: localhost:11434)
-OLLAMA_BASE_URL = "http://localhost:11434"
+# Ollama API Base URL (Standard: 192.168.178.155:11434)
+OLLAMA_BASE_URL = "http://192.168.178.155:11434"
 OLLAMA_API_TAGS = f"{OLLAMA_BASE_URL}/api/tags"
 
 

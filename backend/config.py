@@ -19,24 +19,25 @@ class Settings(BaseSettings):
     binance_testnet: bool = True
     
     # Ollama Configuration
-    ollama_base_url: str = "http://localhost:11434/v1"
+    # Ollama Server IP: 192.168.178.155
+    ollama_base_url: str = "http://192.168.178.155:11434/v1"
     ollama_api_key: str = "ollama"
     
     # NexusChat Agent LLM Configuration
     nexuschat_llm_provider: str = "ollama"
     nexuschat_model: str = "llama3.2"
-    nexuschat_base_url: str = "http://localhost:11434/v1"
+    nexuschat_base_url: str = "http://192.168.178.155:11434/v1"
     
     # CypherMind Agent LLM Configuration
     # Optimiert für DeepSeek-R1:32b (größeres Modell mit längeren Antwortzeiten)
     cyphermind_llm_provider: str = "ollama"
     cyphermind_model: str = "deepseek-r1:32b"  # DeepSeek-R1:32b für bessere Analysen
-    cyphermind_base_url: str = "http://localhost:11434/v1"
+    cyphermind_base_url: str = "http://192.168.178.155:11434/v1"
     
     # CypherTrade Agent LLM Configuration
     cyphertrade_llm_provider: str = "ollama"
     cyphertrade_model: str = "llama3.2"
-    cyphertrade_base_url: str = "http://localhost:11434/v1"
+    cyphertrade_base_url: str = "http://192.168.178.155:11434/v1"
     
     # Trading Configuration
     default_strategy: str = "ma_crossover"
