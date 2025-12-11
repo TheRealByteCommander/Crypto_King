@@ -6,17 +6,19 @@ Project CypherTrade implementiert automatisches Risikomanagement mit Stop-Loss u
 
 ## 📊 Implementierte Regeln
 
-### Stop-Loss: -2%
-- **Trigger**: Position wird automatisch geschlossen bei **-2% Verlust** oder mehr
+### Stop-Loss: -5%
+- **Trigger**: Position wird automatisch geschlossen bei **-5% Verlust** oder mehr
 - **Zweck**: Begrenzt Verluste und schützt das Kapital
 - **Funktioniert für**: LONG und SHORT Positionen
 - **Überwachung**: Automatisch in jedem Bot-Loop (alle 5 Minuten)
 
-### Take-Profit: 2-5%
-- **Trigger**: Position wird automatisch geschlossen bei **2-5% Gewinn**
-- **Zweck**: Sichert Gewinne und verhindert Gewinnrückgänge
+### Take-Profit: ≥2% (MINDESTANFORDERUNG)
+- **Trigger**: Position wird automatisch geschlossen bei **≥2% Gewinn**
+- **KRITISCH**: Verkäufe unter 2% Gewinn werden automatisch blockiert!
+- **Zweck**: Sichert Gewinne und verhindert zu frühe Verkäufe
 - **Funktioniert für**: LONG und SHORT Positionen
 - **Überwachung**: Automatisch in jedem Bot-Loop (alle 5 Minuten)
+- **Trailing Stop**: Bei LONG-Positionen wird Take-Profit ausgelöst, wenn Preis 3% vom Höchststand fällt (aber nur wenn ≥2% Gewinn)
 
 ## 🔧 Funktionsweise
 
@@ -26,8 +28,9 @@ Der Bot prüft in jedem Loop (alle 5 Minuten):
 
 1. **Position vorhanden?** → Prüfe P&L
 2. **P&L berechnen** → Aktueller Preis vs. Entry-Preis
-3. **Stop-Loss prüfen** → Wenn ≤ -2% → Position schließen
-4. **Take-Profit prüfen** → Wenn 2-5% → Position schließen
+3. **Stop-Loss prüfen** → Wenn ≤ -5% → Position schließen
+4. **Take-Profit prüfen** → Wenn ≥2% → Position schließen (Trailing Stop bei LONG)
+5. **SELL-Befehle validieren** → Blockiere automatisch alle Verkäufe unter 2% Gewinn
 
 ### Position-Schließung
 
@@ -60,10 +63,10 @@ Geschlossene Positionen werden mit folgenden Informationen gespeichert:
 ```
 Position: LONG
 Entry Price: 50,000 USDT
-Current Price: 48,900 USDT
-P&L: -2.2%
+Current Price: 47,500 USDT
+P&L: -5.0%
 
-→ STOP LOSS triggered
+→ STOP LOSS triggered (≥5% Verlust)
 → Position geschlossen
 → Trade gespeichert mit exit_reason: "STOP_LOSS"
 ```
@@ -76,9 +79,23 @@ Entry Price: 50,000 USDT
 Current Price: 51,500 USDT
 P&L: +3.0%
 
-→ TAKE PROFIT triggered
+→ TAKE PROFIT triggered (≥2% Gewinn)
 → Position geschlossen
 → Trade gespeichert mit exit_reason: "TAKE_PROFIT"
+```
+
+### Beispiel 3: Verkauf unter 2% wird blockiert
+
+```
+Position: LONG
+Entry Price: 50,000 USDT
+Current Price: 50,800 USDT
+P&L: +1.6%
+
+→ SELL-Befehl von Agent empfangen
+→ System prüft: Gewinn 1.6% < Minimum 2%
+→ SELL-Befehl BLOCKIERT
+→ Position bleibt offen bis ≥2% Gewinn erreicht
 ```
 
 ### Beispiel 3: SHORT Position
@@ -99,9 +116,9 @@ P&L: +3.0% (für SHORT: Profit wenn Preis fällt)
 Die Regeln sind in `backend/constants.py` definiert:
 
 ```python
-STOP_LOSS_PERCENT = -2.0  # Stop loss at -2%
-TAKE_PROFIT_MIN_PERCENT = 2.0  # Minimum take profit at +2%
-TAKE_PROFIT_MAX_PERCENT = 5.0  # Maximum take profit at +5%
+STOP_LOSS_PERCENT = -5.0  # Stop loss at -5%
+TAKE_PROFIT_MIN_PERCENT = 2.0  # Minimum take profit at +2% (MANDATORY - Verkäufe unter 2% werden blockiert)
+TAKE_PROFIT_TRAILING_PERCENT = 3.0  # Trailing stop: sell when price falls 3% from highest price
 ```
 
 **Anpassung:** Edit `backend/constants.py` und Backend neu starten.

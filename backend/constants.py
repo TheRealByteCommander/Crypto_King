@@ -22,8 +22,8 @@ DEFAULT_BOLLINGER_STD_DEV = 2
 # Risk Management Constants
 MIN_PROFIT_LOSS_THRESHOLD = 0.5  # $0.50 minimum profit/loss to consider as success/failure (reduced from $2.0 to enable more learning)
 QUANTITY_DECIMAL_PLACES = 6
-STOP_LOSS_PERCENT = -2.0  # Stop loss at -2% (sell position if loss >= 2%)
-TAKE_PROFIT_MIN_PERCENT = 2.0  # Minimum take profit threshold (+2% - earliest we can take profit)
+STOP_LOSS_PERCENT = -5.0  # Stop loss at -5% (sell position if loss >= 5%)
+TAKE_PROFIT_MIN_PERCENT = 2.0  # Minimum take profit threshold (+2% - earliest we can take profit, MANDATORY minimum)
 TAKE_PROFIT_TRAILING_PERCENT = 3.0  # Trailing stop: sell when price falls 3% from highest price
 
 # Binance Trading Fees

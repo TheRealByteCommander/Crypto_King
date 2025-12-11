@@ -1425,6 +1425,26 @@ class TradingBot:
                         )
                         return
                     
+                    # CRITICAL: Validate minimum profit requirement (2% minimum)
+                    # Calculate current profit percentage
+                    pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                    
+                    # Block SELL if profit is below minimum threshold (unless it's stop loss, which is checked earlier)
+                    if pnl_percent < TAKE_PROFIT_MIN_PERCENT:
+                        logger.warning(
+                            f"Bot {self.bot_id}: ⚠️ SELL signal BLOCKED - Profit too low: "
+                            f"Current profit {pnl_percent:.2f}% < Minimum required {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Entry: {self.position_entry_price}, Current: {current_price}. "
+                            f"Position will remain open until minimum profit target is reached."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ SELL signal BLOCKED: Current profit {pnl_percent:.2f}% is below minimum required {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Position will remain open until profit target is reached.",
+                            "warning"
+                        )
+                        return
+                    
                     # Adjust quantity to match Binance LOT_SIZE filter requirements
                     quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
                     
@@ -1621,6 +1641,27 @@ class TradingBot:
                 elif self.position == "SHORT":
                     # We have a SHORT position - close it by buying
                     current_price = self.binance_client.get_current_price(symbol)
+                    
+                    # CRITICAL: Validate minimum profit requirement (2% minimum) for SHORT positions
+                    # For SHORT: profit when price goes down (entry_price > current_price)
+                    pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                    
+                    # Block BUY to close SHORT if profit is below minimum threshold (unless it's stop loss, which is checked earlier)
+                    if pnl_percent < TAKE_PROFIT_MIN_PERCENT:
+                        logger.warning(
+                            f"Bot {self.bot_id}: ⚠️ BUY to close SHORT signal BLOCKED - Profit too low: "
+                            f"Current profit {pnl_percent:.2f}% < Minimum required {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Entry: {self.position_entry_price}, Current: {current_price}. "
+                            f"Position will remain open until minimum profit target is reached."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ BUY to close SHORT signal BLOCKED: Current profit {pnl_percent:.2f}% is below minimum required {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Position will remain open until profit target is reached.",
+                            "warning"
+                        )
+                        return
+                    
                     amount_usdt = self.current_config["amount"]
                     
                     # Calculate quantity to buy to close short
