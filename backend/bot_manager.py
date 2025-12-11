@@ -684,7 +684,12 @@ class TradingBot:
                                 if total_qty > 0:
                                     execution_price = total_quote / total_qty
                         elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                            execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                            executed_qty = float(order.get("executedQty", 0))
+                            if executed_qty > 0:
+                                execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
+                            else:
+                                logger.warning(f"Bot {self.bot_id}: executedQty is 0 for SHORT close, using fallback price")
+                                execution_price = float(order.get("price", 0)) or current_price
                         
                         # Calculate final P&L (for SHORT: profit when price goes down)
                         pnl = (self.position_entry_price - execution_price) * quantity
@@ -906,7 +911,12 @@ class TradingBot:
                                 if total_qty > 0:
                                     execution_price = total_quote / total_qty
                         elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                            execution_price = float(order.get("cummulativeQuoteQty")) / float(order.get("executedQty"))
+                            executed_qty = float(order.get("executedQty", 0))
+                            if executed_qty > 0:
+                                execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
+                            else:
+                                logger.warning(f"Bot {self.bot_id}: executedQty is 0 for SHORT close, using fallback price")
+                                execution_price = float(order.get("price", 0)) or current_price
                         
                         # Calculate final P&L (for SHORT: profit when price goes down)
                         pnl = (self.position_entry_price - execution_price) * quantity
