@@ -1021,6 +1021,47 @@ async def broadcast_updates():
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks on application startup."""
+    global db, agent_manager, bot_manager, default_bot, mcp_server
+    
+    # KRITISCH: Initialisiere DB und Manager falls sie beim Import fehlgeschlagen sind
+    if db is None:
+        logger.info("Retrying MongoDB connection initialization...")
+        try:
+            mongo_url = settings.mongo_url
+            db_name = settings.db_name
+            client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=10000)  # 10 Sekunden Timeout
+            db = client[db_name]
+            logger.info(f"MongoDB connected to {db_name}")
+        except Exception as e:
+            logger.error(f"Failed to connect to MongoDB on startup: {e}")
+            # Versuche trotzdem fortzufahren, falls DB später verfügbar wird
+    
+    # Initialisiere AgentManager und BotManager falls sie beim Import fehlgeschlagen sind
+    if agent_manager is None or bot_manager is None:
+        logger.info("Retrying AgentManager/BotManager initialization...")
+        try:
+            if db is not None:
+                agent_manager = AgentManager(db, bot=None, binance_client=None)
+                bot_manager = BotManager(db, agent_manager)
+                agent_manager.bot = bot_manager
+                default_bot = bot_manager.get_bot()
+                logger.info("AgentManager and BotManager initialized successfully on startup")
+            else:
+                logger.warning("Cannot initialize managers: DB not available")
+        except Exception as e:
+            logger.error(f"Failed to initialize managers on startup: {e}", exc_info=True)
+    
+    # Initialisiere MCP Server falls er beim Import fehlgeschlagen ist
+    if mcp_server is None and db is not None and agent_manager is not None and bot_manager is not None:
+        logger.info("Retrying MCP Server initialization...")
+        try:
+            mcp_server = create_mcp_server(db, agent_manager, bot_manager)
+            if mcp_server:
+                app.include_router(mcp_server.router)
+                logger.info("MCP Server routes registered on startup")
+        except Exception as e:
+            logger.warning(f"Could not initialize MCP Server on startup: {e}")
+    
     # Validate MongoDB connection on startup
     mongodb_valid, mongodb_error = await validate_mongodb_connection()
     if not mongodb_valid:
