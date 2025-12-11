@@ -720,6 +720,47 @@ async def get_statistics():
         total_sold_24h = sum(float(t.get("quote_qty", 0)) for t in sell_trades_24h)
         profit_loss_24h = total_sold_24h - total_bought_24h
         
+        # --- Last 7 days statistics (für Total Trades) ---
+        cutoff_7d = now_utc - timedelta(days=7)
+        cutoff_7d_iso = cutoff_7d.isoformat()
+        trades_7d_filter = {"timestamp": {"$gte": cutoff_7d_iso}}
+        total_trades_7d = await db.trades.count_documents(trades_7d_filter)
+        
+        # --- Depot Summe (Portfolio Value) ---
+        depot_summe = 0.0
+        try:
+            from binance_client import BinanceClientWrapper
+            binance_client = BinanceClientWrapper()
+            # Get USDT balance
+            usdt_balance = binance_client.get_account_balance("USDT", "SPOT")
+            depot_summe += usdt_balance
+            
+            # Get all running bots and calculate portfolio value
+            all_bots = bot_manager.get_all_bots()
+            for bot_id, bot in all_bots.items():
+                if not bot.is_running or not bot.current_config:
+                    continue
+                
+                symbol = bot.current_config.get("symbol")
+                trading_mode = bot.current_config.get("trading_mode", "SPOT")
+                
+                if not symbol:
+                    continue
+                
+                # Extract base asset from symbol
+                base_asset = symbol.replace("USDT", "").replace("BUSD", "").replace("BTC", "").replace("ETH", "")
+                
+                try:
+                    balance = binance_client.get_account_balance(base_asset, trading_mode)
+                    if balance > 0.000001:
+                        current_price = binance_client.get_current_price(symbol)
+                        depot_summe += balance * current_price
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning(f"Error calculating depot summe: {e}")
+            depot_summe = 0.0
+        
         # Get memory stats
         memory_stats = {
             "nexuschat": await db.memory_nexuschat.count_documents({}),
@@ -742,6 +783,10 @@ async def get_statistics():
             "profit_loss_usdt_24h": round(profit_loss_24h, 2),
             "total_bought_usdt_24h": round(total_bought_24h, 2),
             "total_sold_usdt_24h": round(total_sold_24h, 2),
+            # Last 7 days (für Total Trades)
+            "total_trades_7d": total_trades_7d,
+            # Depot Summe (Portfolio Value)
+            "depot_summe": round(depot_summe, 2),
             "stats_window": {
                 "type": "last_24h",
                 "cutoff_utc": cutoff_24h_iso,

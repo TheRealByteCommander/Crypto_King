@@ -212,51 +212,36 @@ const Dashboard = () => {
 
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8 pb-20 md:pb-8">
-          {/* Stats Overview (letzte 24h) */}
-          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-8">
+          {/* Stats Overview - Nur wichtige Zahlen */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 mb-4 md:mb-8">
             <StatsCard
               title="Profit/Loss (24h)"
-              value={stats ? `$${stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt}` : "$0.00"}
+              value={stats ? `$${stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt ?? 0}` : "$0.00"}
               icon={
-                stats && (stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt) >= 0
+                stats && (stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt ?? 0) >= 0
                   ? TrendingUp
                   : TrendingDown
               }
               color={
-                stats && (stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt) >= 0
+                stats && (stats.profit_loss_usdt_24h ?? stats.profit_loss_usdt ?? 0) >= 0
                   ? "green"
                   : "red"
               }
               testId="profit-loss-card"
             />
             <StatsCard
-              title="Trades (24h)"
-              value={stats ? (stats.total_trades_24h ?? stats.total_trades) : 0}
+              title="Depot Summe"
+              value={stats ? `$${stats.depot_summe ?? 0}` : "$0.00"}
+              icon={Wallet}
+              color="indigo"
+              testId="depot-summe-card"
+            />
+            <StatsCard
+              title="Total Trades (7 Tage)"
+              value={stats ? (stats.total_trades_7d ?? 0) : 0}
               icon={Activity}
               color="blue"
               testId="total-trades-card"
-            />
-            <StatsCard
-              title="Bought (24h)"
-              value={
-                stats
-                  ? `$${stats.total_bought_usdt_24h ?? stats.total_bought_usdt}`
-                  : "$0.00"
-              }
-              icon={DollarSign}
-              color="cyan"
-              testId="total-bought-card"
-            />
-            <StatsCard
-              title="Sold (24h)"
-              value={
-                stats
-                  ? `$${stats.total_sold_usdt_24h ?? stats.total_sold_usdt}`
-                  : "$0.00"
-              }
-              icon={DollarSign}
-              color="purple"
-              testId="total-sold-card"
             />
           </div>
 
