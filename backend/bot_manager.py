@@ -574,22 +574,39 @@ class TradingBot:
                             quantity = adjusted_quantity
                             order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
                             
-                            # Get execution price from order if available
-                            execution_price = current_price
+                            # Get execution price from order - KRITISCH: Kein Fallback, Kurs MUSS verfügbar sein!
+                            execution_price = None
                             if order.get("fills"):
                                 fills = order.get("fills", [])
                                 if fills:
                                     total_qty = sum(float(f.get("qty", 0)) for f in fills)
                                     total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
-                                    if total_qty > 0:
+                                    if total_qty > 0 and total_quote > 0:
                                         execution_price = total_quote / total_qty
-                            elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                                executed_qty = float(order.get("executedQty", 0))
-                                if executed_qty > 0:
-                                    execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
-                                else:
-                                    logger.warning(f"Bot {self.bot_id}: executedQty is 0, using fallback price")
-                                    execution_price = float(order.get("price", 0)) or current_price
+                                    elif total_qty > 0:
+                                        # Try to calculate from price in fills
+                                        total_value = sum(float(f.get("price", 0)) * float(f.get("qty", 0)) for f in fills if f.get("price"))
+                                        if total_value > 0:
+                                            execution_price = total_value / total_qty
+                            
+                            if execution_price is None or execution_price <= 0:
+                                if order.get("price"):
+                                    execution_price = float(order.get("price"))
+                                elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
+                                    executed_qty = float(order.get("executedQty", 0))
+                                    if executed_qty > 0:
+                                        execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
+                            
+                            # KRITISCH: Wenn execution_price nicht verfügbar, Trade abbrechen!
+                            if execution_price is None or execution_price <= 0:
+                                error_msg = f"KRITISCHER FEHLER: Execution price nicht verfügbar für STOP LOSS Order {order.get('orderId', 'N/A')}"
+                                logger.error(f"Bot {self.bot_id}: {error_msg}. Order-Daten: {order}")
+                                await self.agent_manager.log_agent_message(
+                                    "CypherTrade",
+                                    f"❌ {error_msg} - STOP LOSS kann nicht verarbeitet werden!",
+                                    "error"
+                                )
+                                return
                             
                             # Calculate final P&L
                             pnl = (execution_price - self.position_entry_price) * quantity
@@ -674,22 +691,14 @@ class TradingBot:
                         quantity = adjusted_quantity
                         order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                         
-                        # Get execution price from order if available
-                        execution_price = current_price
-                        if order.get("fills"):
-                            fills = order.get("fills", [])
-                            if fills:
-                                total_qty = sum(float(f.get("qty", 0)) for f in fills)
-                                total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
-                                if total_qty > 0:
-                                    execution_price = total_quote / total_qty
-                        elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                            executed_qty = float(order.get("executedQty", 0))
-                            if executed_qty > 0:
-                                execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
-                            else:
-                                logger.warning(f"Bot {self.bot_id}: executedQty is 0 for SHORT close, using fallback price")
-                                execution_price = float(order.get("price", 0)) or current_price
+                        # Get execution price from order - KRITISCH: Kein Fallback!
+                        try:
+                            execution_price = self._get_execution_price_from_order(order, symbol, current_price)
+                        except ValueError as e:
+                            error_msg = f"STOP LOSS für SHORT Position fehlgeschlagen: {str(e)}"
+                            logger.error(f"Bot {self.bot_id}: {error_msg}")
+                            await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
+                            return
                         
                         # Calculate final P&L (for SHORT: profit when price goes down)
                         pnl = (self.position_entry_price - execution_price) * quantity
@@ -802,28 +811,14 @@ class TradingBot:
                             quantity = adjusted_quantity
                             order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
                             
-                            # Get actual execution price from order
-                            execution_price = execution_price_check  # Fallback
-                            if order.get("fills") and len(order["fills"]) > 0:
-                                # Calculate weighted average execution price
-                                total_qty = 0
-                                total_value = 0
-                                for fill in order["fills"]:
-                                    fill_qty = float(fill.get("qty", 0))
-                                    fill_price = float(fill.get("price", execution_price_check))
-                                    total_qty += fill_qty
-                                    total_value += fill_qty * fill_price
-                                if total_qty > 0:
-                                    execution_price = total_value / total_qty
-                            elif order.get("price"):
-                                execution_price = float(order.get("price"))
-                            elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                                executed_qty = float(order.get("executedQty", 0))
-                                if executed_qty > 0:
-                                    execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
-                                else:
-                                    logger.warning(f"Bot {self.bot_id}: executedQty is 0, using fallback price")
-                                    execution_price = float(order.get("price", 0)) or current_price
+                            # Get actual execution price from order - KRITISCH: Kein Fallback!
+                            try:
+                                execution_price = self._get_execution_price_from_order(order, symbol, execution_price_check)
+                            except ValueError as e:
+                                error_msg = f"TAKE PROFIT fehlgeschlagen: {str(e)}"
+                                logger.error(f"Bot {self.bot_id}: {error_msg}")
+                                await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
+                                return
                             
                             # Calculate final P&L using actual execution price
                             pnl = (execution_price - self.position_entry_price) * quantity
@@ -901,22 +896,14 @@ class TradingBot:
                         quantity = adjusted_quantity
                         order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                         
-                        # Get execution price from order if available
-                        execution_price = current_price
-                        if order.get("fills"):
-                            fills = order.get("fills", [])
-                            if fills:
-                                total_qty = sum(float(f.get("qty", 0)) for f in fills)
-                                total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
-                                if total_qty > 0:
-                                    execution_price = total_quote / total_qty
-                        elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
-                            executed_qty = float(order.get("executedQty", 0))
-                            if executed_qty > 0:
-                                execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
-                            else:
-                                logger.warning(f"Bot {self.bot_id}: executedQty is 0 for SHORT close, using fallback price")
-                                execution_price = float(order.get("price", 0)) or current_price
+                        # Get execution price from order - KRITISCH: Kein Fallback!
+                        try:
+                            execution_price = self._get_execution_price_from_order(order, symbol, current_price)
+                        except ValueError as e:
+                            error_msg = f"STOP LOSS für SHORT Position fehlgeschlagen: {str(e)}"
+                            logger.error(f"Bot {self.bot_id}: {error_msg}")
+                            await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
+                            return
                         
                         # Calculate final P&L (for SHORT: profit when price goes down)
                         pnl = (self.position_entry_price - execution_price) * quantity
@@ -1191,6 +1178,64 @@ class TradingBot:
             logger.warning(f"Bot {self.bot_id}: Error calculating total spent: {e}")
             return 0.0
     
+    def _get_execution_price_from_order(self, order: Dict[str, Any], symbol: str, current_price: float = None) -> float:
+        """
+        Berechnet execution_price aus Order-Daten.
+        
+        KRITISCH: Wirft ValueError wenn execution_price nicht verfügbar ist - kein Fallback!
+        
+        Args:
+            order: Order-Dict von Binance API
+            symbol: Trading-Symbol
+            current_price: Aktueller Kurs (nur für Fehlermeldungen)
+        
+        Returns:
+            execution_price als float
+        
+        Raises:
+            ValueError: Wenn execution_price nicht berechnet werden kann
+        """
+        execution_price = None
+        
+        # 1. Versuche aus fills zu berechnen (beste Quelle)
+        if order.get("fills"):
+            fills = order.get("fills", [])
+            if fills:
+                total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                if total_qty > 0 and total_quote > 0:
+                    execution_price = total_quote / total_qty
+                elif total_qty > 0:
+                    # Wenn quoteQty fehlt, berechne aus price * qty
+                    total_value = sum(float(f.get("price", 0)) * float(f.get("qty", 0)) for f in fills if f.get("price"))
+                    if total_value > 0:
+                        execution_price = total_value / total_qty
+        
+        # 2. Versuche aus cummulativeQuoteQty / executedQty
+        if (execution_price is None or execution_price <= 0) and order.get("cummulativeQuoteQty") and order.get("executedQty"):
+            executed_qty = float(order.get("executedQty", 0))
+            if executed_qty > 0:
+                execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
+        
+        # 3. Versuche aus order.get("price")
+        if (execution_price is None or execution_price <= 0) and order.get("price"):
+            execution_price = float(order.get("price"))
+        
+        # KRITISCH: Wenn execution_price immer noch nicht verfügbar, Fehler werfen!
+        if execution_price is None or execution_price <= 0:
+            error_msg = (
+                f"KRITISCHER FEHLER: Execution price nicht verfügbar für Order {order.get('orderId', 'N/A')} ({symbol}). "
+                f"Order-Daten: fills={bool(order.get('fills'))}, "
+                f"price={order.get('price')}, "
+                f"cummulativeQuoteQty={order.get('cummulativeQuoteQty')}, "
+                f"executedQty={order.get('executedQty')}, "
+                f"current_price={current_price}"
+            )
+            logger.error(f"Bot {self.bot_id}: {error_msg}")
+            raise ValueError(error_msg)
+        
+        return execution_price
+    
     async def _execute_trade(self, analysis: Dict[str, Any], decision_price: float = None, decision_timestamp: datetime = None):
         """Execute a trade based on analysis.
         
@@ -1335,8 +1380,8 @@ class TradingBot:
                 order = self.binance_client.execute_order(symbol, "BUY", quantity, "MARKET", trading_mode)
                 execution_end_time = datetime.now(timezone.utc)
                 
-                # Get actual execution price from order
-                execution_price = float(order.get("price", 0)) or current_price
+                # Get actual execution price from order - KRITISCH: Kein Fallback, Kurs MUSS verfügbar sein!
+                execution_price = None
                 if order.get("fills"):
                     # Use average fill price if available
                     fills = order.get("fills", [])
@@ -1350,12 +1395,33 @@ class TradingBot:
                             total_value = sum(float(f.get("price", 0)) * float(f.get("qty", 0)) for f in fills if f.get("price"))
                             if total_value > 0:
                                 execution_price = total_value / total_qty
-                            else:
-                                logger.warning(f"Bot {self.bot_id}: Cannot calculate execution_price from fills, using fallback")
-                                execution_price = float(order.get("price", 0)) or current_price
-                        else:
-                            logger.warning(f"Bot {self.bot_id}: total_qty is 0 in fills, using fallback price")
-                            execution_price = float(order.get("price", 0)) or current_price
+                
+                # Fallback zu order.get("price") oder cummulativeQuoteQty/executedQty
+                if execution_price is None or execution_price <= 0:
+                    if order.get("price"):
+                        execution_price = float(order.get("price"))
+                    elif order.get("cummulativeQuoteQty") and order.get("executedQty"):
+                        executed_qty = float(order.get("executedQty", 0))
+                        if executed_qty > 0:
+                            execution_price = float(order.get("cummulativeQuoteQty")) / executed_qty
+                
+                # KRITISCH: Wenn execution_price immer noch nicht verfügbar, Trade abbrechen!
+                if execution_price is None or execution_price <= 0:
+                    error_msg = f"KRITISCHER FEHLER: Execution price nicht verfügbar für Order {order.get('orderId', 'N/A')}. Order-Daten: {order}"
+                    logger.error(f"Bot {self.bot_id}: {error_msg}")
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"❌ {error_msg} - Trade kann nicht verarbeitet werden!",
+                        "error"
+                    )
+                    # Versuche Order zu stornieren falls möglich
+                    try:
+                        if order.get("orderId"):
+                            self.binance_client.client.cancel_order(symbol=symbol, orderId=order.get("orderId"))
+                            logger.info(f"Bot {self.bot_id}: Order {order.get('orderId')} storniert wegen fehlendem execution_price")
+                    except Exception as cancel_error:
+                        logger.warning(f"Bot {self.bot_id}: Konnte Order nicht stornieren: {cancel_error}")
+                    return
                 
                 # Calculate delay and slippage
                 execution_delay_seconds = None
@@ -1588,16 +1654,14 @@ class TradingBot:
                     order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
                     execution_end_time = datetime.now(timezone.utc)
                     
-                    # Get actual execution price from order
-                    execution_price = float(order.get("price", 0)) or current_price
-                    if order.get("fills"):
-                        # Use average fill price if available
-                        fills = order.get("fills", [])
-                        if fills:
-                            total_qty = sum(float(f.get("qty", 0)) for f in fills)
-                            total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
-                            if total_qty > 0:
-                                execution_price = total_quote / total_qty
+                    # Get actual execution price from order - KRITISCH: Kein Fallback!
+                    try:
+                        execution_price = self._get_execution_price_from_order(order, symbol, current_price)
+                    except ValueError as e:
+                        error_msg = f"SELL Order fehlgeschlagen: {str(e)}"
+                        logger.error(f"Bot {self.bot_id}: {error_msg}")
+                        await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
+                        return
                     
                     # Calculate delay and slippage
                     execution_delay_seconds = None
@@ -1872,15 +1936,14 @@ class TradingBot:
                         order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
                         execution_end_time = datetime.now(timezone.utc)
                         
-                        # Get actual execution price from order
-                        execution_price = float(order.get("price", 0)) or current_price
-                        if order.get("fills"):
-                            fills = order.get("fills", [])
-                            if fills:
-                                total_qty = sum(float(f.get("qty", 0)) for f in fills)
-                                total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
-                                if total_qty > 0:
-                                    execution_price = total_quote / total_qty
+                        # Get actual execution price from order - KRITISCH: Kein Fallback!
+                        try:
+                            execution_price = self._get_execution_price_from_order(order, symbol, current_price)
+                        except ValueError as e:
+                            error_msg = f"SHORT Position öffnen fehlgeschlagen: {str(e)}"
+                            logger.error(f"Bot {self.bot_id}: {error_msg}")
+                            await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
+                            return
                         
                         # Calculate delay and slippage
                         execution_delay_seconds = None
