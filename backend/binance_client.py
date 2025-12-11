@@ -302,15 +302,32 @@ class BinanceClientWrapper:
             logger.error(f"Error executing order: {e}")
             raise
     
-    def get_order_status(self, symbol: str, order_id: int) -> Dict[str, Any]:
-        """Get status of a specific order."""
+    def get_order_status(self, symbol: str, order_id: int, trading_mode: str = "SPOT") -> Dict[str, Any]:
+        """Get status of a specific order with full details."""
         try:
-            order = self.client.get_order(symbol=symbol, orderId=order_id)
+            if trading_mode == "SPOT":
+                order = self.client.get_order(symbol=symbol, orderId=order_id)
+            elif trading_mode == "MARGIN":
+                order = self.client.get_margin_order(symbol=symbol, orderId=order_id)
+            elif trading_mode == "FUTURES":
+                order = self.client.futures_get_order(symbol=symbol, orderId=order_id)
+            else:
+                raise ValueError(f"Unsupported trading mode: {trading_mode}")
+            
+            # Gebe vollständige Order-Daten zurück
             return {
-                "orderId": order['orderId'],
-                "status": order['status'],
-                "executedQty": float(order['executedQty']),
-                "cummulativeQuoteQty": float(order.get('cummulativeQuoteQty', 0))
+                "orderId": order.get('orderId', order_id),
+                "status": order.get('status', ''),
+                "executedQty": float(order.get('executedQty', 0)),
+                "cummulativeQuoteQty": float(order.get('cummulativeQuoteQty', order.get('cumQuote', order.get('cumulativeQuoteQty', 0)))),
+                "price": order.get('price'),
+                "fills": order.get('fills', []),
+                "clientOrderId": order.get('clientOrderId', ''),
+                "timeInForce": order.get('timeInForce', ''),
+                "type": order.get('type', ''),
+                "side": order.get('side', ''),
+                "symbol": order.get('symbol', symbol),
+                "_raw_order": order
             }
         except BinanceAPIException as e:
             logger.error(f"Binance API error getting order status: {e}")
