@@ -12,14 +12,14 @@ const StatsCard = ({ title, value, icon: Icon, color, testId }) => {
 
   return (
     <div 
-      className={`cyber-card p-6 bg-gradient-to-br ${colorClasses[color]}`}
+      className={`cyber-card p-4 md:p-6 bg-gradient-to-br ${colorClasses[color]} touch-manipulation`}
       data-testid={testId}
     >
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-slate-400">{title}</h3>
-        <Icon className={`w-5 h-5 ${colorClasses[color].split(' ')[3]}`} />
+      <div className="flex items-center justify-between mb-2 md:mb-3">
+        <h3 className="text-xs md:text-sm font-medium text-slate-400 truncate pr-2">{title}</h3>
+        <Icon className={`w-4 h-4 md:w-5 md:h-5 flex-shrink-0 ${colorClasses[color].split(' ')[3]}`} />
       </div>
-      <p className={`text-2xl font-bold mono ${colorClasses[color].split(' ')[3]}`}>
+      <p className={`text-xl md:text-2xl font-bold mono ${colorClasses[color].split(' ')[3]} break-words`}>
         {value}
       </p>
     </div>

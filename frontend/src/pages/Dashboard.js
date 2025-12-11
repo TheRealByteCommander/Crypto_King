@@ -220,7 +220,7 @@ const Dashboard = () => {
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8 pb-20 md:pb-8">
           {/* Stats Overview - Nur wichtige Zahlen */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 mb-4 md:mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 mb-4 md:mb-8 touch-manipulation">
             <StatsCard
               title="Profit/Loss (24h)"
               value={(() => {
