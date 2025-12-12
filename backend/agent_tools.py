@@ -614,13 +614,52 @@ class AgentTools:
         """Execute a tool function based on agent name and tool name."""
         try:
             if tool_name == "get_current_price":
-                if self.binance_client is None:
-                    return {"error": "Binance client not available", "success": False}
                 symbol = parameters.get("symbol")
                 if not symbol:
                     return {"error": "Symbol parameter is required", "success": False}
+                
+                # PRÜFE ZUERST DEN PERMANENTEN KURS-CACHE (alle 30 Sekunden aktualisiert)
+                # Dies ist besonders effizient für CypherTrade, da die Kurse permanent verfügbar sind
+                if self.bot:
+                    # Prüfe ob bot ein BotManager ist (hat price_cache)
+                    from bot_manager import BotManager
+                    if isinstance(self.bot, BotManager):
+                        cached_price = self.bot.get_current_price_for_symbol(symbol)
+                        if cached_price is not None:
+                            logger.debug(f"get_current_price: Using cached price for {symbol}: {cached_price}")
+                            return {
+                                "success": True,
+                                "price": cached_price,
+                                "symbol": symbol,
+                                "source": "cache",
+                                "note": "Price from permanent update loop (updated every 30 seconds)"
+                            }
+                    # Prüfe ob bot ein TradingBot ist und Zugriff auf BotManager hat
+                    elif hasattr(self.bot, 'agent_manager') and hasattr(self.bot.agent_manager, 'bot'):
+                        bot_manager = self.bot.agent_manager.bot
+                        if isinstance(bot_manager, BotManager):
+                            cached_price = bot_manager.get_current_price_for_symbol(symbol)
+                            if cached_price is not None:
+                                logger.debug(f"get_current_price: Using cached price for {symbol}: {cached_price}")
+                                return {
+                                    "success": True,
+                                    "price": cached_price,
+                                    "symbol": symbol,
+                                    "source": "cache",
+                                    "note": "Price from permanent update loop (updated every 30 seconds)"
+                                }
+                
+                # Fallback: Direkter Binance-Abruf wenn Cache nicht verfügbar
+                if self.binance_client is None:
+                    return {"error": "Binance client not available", "success": False}
                 price = self.binance_client.get_current_price(symbol)
-                return {"success": True, "price": price, "symbol": symbol}
+                return {
+                    "success": True,
+                    "price": price,
+                    "symbol": symbol,
+                    "source": "binance",
+                    "note": "Price fetched directly from Binance (cache not available)"
+                }
             
             elif tool_name == "get_market_data":
                 if self.binance_client is None:
