@@ -1282,5 +1282,20 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    """Close MongoDB connection and stop background tasks on application shutdown."""
+    try:
+        # Stoppe permanenten Kurs-Update-Loop
+        if bot_manager is not None:
+            try:
+                await bot_manager.stop_price_update_loop()
+                logger.info("Price update loop stopped")
+            except Exception as e:
+                logger.warning(f"Error stopping price update loop: {e}")
+        
+        # Schließe MongoDB-Verbindung
+        if 'client' in globals() and client:
+            client.close()
+            logger.info("MongoDB connection closed")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
     logger.info("Project CypherTrade shut down")
