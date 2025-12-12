@@ -411,8 +411,15 @@ class TradingBot:
                     phase_confidence = market_phase_analysis.get("confidence", 0.0)
                     market_phase_info = f"\nMarket Phase: {self.current_market_phase} (Confidence: {phase_confidence:.2f})"
                 
-                log_message = f"Market Analysis for {symbol}: {signal} signal (Confidence: {confidence:.2f}){price_info}{market_phase_info}\nReason: {reason}"
+                log_message = f"📊 EMPFEHLUNG für {symbol}: {signal} Signal (Confidence: {confidence:.2f}){price_info}{market_phase_info}\nBegründung: {reason}\n\nHINWEIS: Dies ist eine Empfehlung - CypherTrade trifft die finale Entscheidung basierend auf Profitzielen, Stop-Loss und Mindest-Haltedauer."
                 await self.agent_manager.log_agent_message("CypherMind", log_message, "analysis")
+                
+                # Informiere auch CypherTrade über die Empfehlung
+                await self.agent_manager.log_agent_message(
+                    "CypherTrade",
+                    f"📋 EMPFEHLUNG von CypherMind für {symbol}: {signal} Signal (Confidence: {confidence:.2f})\nBegründung: {reason}\n\nDu triffst die FINALE Entscheidung - prüfe Profitziele (≥2%), Stop-Loss (-5%), Mindest-Haltedauer (15 Min) und verfügbare Balances.",
+                    "recommendation"
+                )
                 
                 # Step 5: Check stop loss and take profit for existing positions BEFORE executing new trades
                 if self.position is not None and self.position_entry_price > 0:
