@@ -26,7 +26,6 @@ STOP_LOSS_PERCENT = -5.0  # Stop loss at -5% (sell position if loss >= 5%)
 TAKE_PROFIT_MIN_PERCENT = 2.0  # Minimum take profit threshold (+2% - earliest we can take profit, MANDATORY minimum)
 TAKE_PROFIT_TRAILING_PERCENT = 3.0  # Trailing stop: sell when price falls 3% from highest price
 LOW_PROFIT_THRESHOLD = 1.0  # Negative Bewertung für Trades mit <1% Profit (Agents sollen auf Limits achten lernen)
-MIN_HOLDING_TIME_MINUTES = 15  # Mindest-Haltedauer in Minuten - verhindert zu frühe Verkäufe (nur bei Stop-Loss ignorieren)
 
 # Binance Trading Fees
 BINANCE_TAKER_FEE = 0.001  # 0.1% fee for market orders (taker)

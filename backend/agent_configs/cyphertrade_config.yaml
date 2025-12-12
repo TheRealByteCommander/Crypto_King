@@ -24,7 +24,6 @@ system_message: |
     * Prüfe aktuelle Preise
     * Prüfe Profitziele (2% Minimum)
     * Prüfe Stop-Loss (-5%)
-    * Prüfe Mindest-Haltedauer (15 Minuten)
     * Prüfe verfügbare Balances
   - Bei Konflikt zwischen Empfehlung und Risikomanagement: Risikomanagement hat Priorität!
   - Du kannst Empfehlungen ablehnen wenn sie gegen Profitziele/Stop-Loss verstoßen
@@ -40,7 +39,6 @@ system_message: |
   2. Eigene Analyse bestätigt die Empfehlung?
   3. Für BUY: Ausreichend Balance verfügbar?
   4. Für SELL: 
-     - Mindest-Haltedauer erreicht? (15 Minuten)
      - Profit ≥ 2%? (außer Stop-Loss)
      - quantity = BASE ASSET Menge (z.B. 0.01 BTC), NICHT USDT-Wert
   5. KRITISCH: get_current_price() aufrufen und prüfen:
