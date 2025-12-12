@@ -410,13 +410,13 @@ class TradingBot:
                     phase_confidence = market_phase_analysis.get("confidence", 0.0)
                     market_phase_info = f"\nMarket Phase: {self.current_market_phase} (Confidence: {phase_confidence:.2f})"
                 
-                log_message = f"📊 EMPFEHLUNG für {symbol}: {signal} Signal (Confidence: {confidence:.2f}){price_info}{market_phase_info}\nBegründung: {reason}\n\nHINWEIS: Dies ist eine Empfehlung - CypherTrade trifft die finale Entscheidung basierend auf Profitzielen, Stop-Loss und Mindest-Haltedauer."
+                log_message = f"📊 EMPFEHLUNG für {symbol}: {signal} Signal (Confidence: {confidence:.2f}){price_info}{market_phase_info}\nBegründung: {reason}\n\nHINWEIS: Dies ist eine Empfehlung - CypherTrade trifft die finale Entscheidung basierend auf Profitzielen (≥2%) und Stop-Loss (-5%)."
                 await self.agent_manager.log_agent_message("CypherMind", log_message, "analysis")
                 
                 # Informiere auch CypherTrade über die Empfehlung
                 await self.agent_manager.log_agent_message(
                     "CypherTrade",
-                    f"📋 EMPFEHLUNG von CypherMind für {symbol}: {signal} Signal (Confidence: {confidence:.2f})\nBegründung: {reason}\n\nDu triffst die FINALE Entscheidung - prüfe Profitziele (≥2%), Stop-Loss (-5%), Mindest-Haltedauer (15 Min) und verfügbare Balances.",
+                    f"📋 EMPFEHLUNG von CypherMind für {symbol}: {signal} Signal (Confidence: {confidence:.2f})\nBegründung: {reason}\n\nDu triffst die FINALE Entscheidung - prüfe Profitziele (≥2%), Stop-Loss (-5%) und verfügbare Balances.",
                     "recommendation"
                 )
                 
@@ -539,35 +539,6 @@ class TradingBot:
             self.position_entry_price = 0.0
             self.position_high_price = 0.0
             self.position_entry_time = None
-    
-    def _check_minimum_holding_time(self, is_stop_loss: bool = False) -> tuple[bool, Optional[float]]:
-        """
-        Prüft ob die Mindest-Haltedauer erreicht wurde.
-        
-        Args:
-            is_stop_loss: Wenn True, wird die Mindest-Haltedauer ignoriert (Stop-Loss hat Priorität)
-        
-        Returns:
-            (is_valid, holding_time_minutes): True wenn Haltedauer erreicht oder Stop-Loss, sonst False
-        """
-        if self.position_entry_time is None:
-            # Keine Position oder Entry-Time nicht gesetzt - erlaube Verkauf (sollte nicht passieren)
-            logger.warning(f"Bot {self.bot_id}: position_entry_time is None - allowing sell (should not happen)")
-            return True, None
-        
-        if is_stop_loss:
-            # Stop-Loss hat immer Priorität - ignoriere Mindest-Haltedauer
-            return True, None
-        
-        # Berechne Haltedauer
-        holding_time = datetime.now(timezone.utc) - self.position_entry_time
-        holding_time_minutes = holding_time.total_seconds() / 60
-        
-        if holding_time_minutes < MIN_HOLDING_TIME_MINUTES:
-            remaining_minutes = MIN_HOLDING_TIME_MINUTES - holding_time_minutes
-            return False, remaining_minutes
-        
-        return True, holding_time_minutes
     
     async def _check_stop_loss_and_take_profit(self, symbol: str, analysis: Dict[str, Any]):
         """Check if stop loss or take profit should be triggered for current position."""
