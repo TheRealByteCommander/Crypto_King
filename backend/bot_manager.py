@@ -17,7 +17,8 @@ from constants import (
     STOP_LOSS_PERCENT,
     TAKE_PROFIT_MIN_PERCENT,
     TAKE_PROFIT_TRAILING_PERCENT,
-    LOW_PROFIT_THRESHOLD
+    LOW_PROFIT_THRESHOLD,
+    PRICE_UPDATE_INTERVAL_SECONDS
 )
 import json
 
@@ -2271,6 +2272,9 @@ class BotManager:
         self.bots: Dict[str, TradingBot] = {}
         # Shared Binance client (can be reused across bots)
         self.shared_binance_client = None
+        # Price cache für aktive Bots (wird alle 30 Sekunden aktualisiert)
+        self.price_cache: Dict[str, Dict[str, Any]] = {}  # {symbol: {"price": float, "timestamp": datetime, "bot_ids": [str]}}
+        self.price_update_task = None  # Background task für permanente Kurs-Updates
     
     def get_bot(self, bot_id: Optional[str] = None) -> TradingBot:
         """Get or create a bot instance."""

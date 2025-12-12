@@ -1084,6 +1084,14 @@ async def startup_event():
     
     asyncio.create_task(broadcast_updates())
     
+    # Starte permanenten Kurs-Update-Loop für CypherTrade (alle 30 Sekunden)
+    if bot_manager is not None:
+        try:
+            await bot_manager.start_price_update_loop()
+            logger.info("Permanent price update loop started for CypherTrade (every 30 seconds)")
+        except Exception as e:
+            logger.error(f"Could not start price update loop: {e}", exc_info=True)
+    
     # Starte Autonomous Manager
     global autonomous_manager
     try:

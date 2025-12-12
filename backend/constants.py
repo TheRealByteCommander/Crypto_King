@@ -6,6 +6,7 @@ Application constants to replace magic numbers.
 BOT_LOOP_INTERVAL_SECONDS = 300  # 5 minutes
 BOT_ERROR_RETRY_DELAY_SECONDS = 60  # 1 minute
 BOT_BROADCAST_INTERVAL_SECONDS = 10  # 10 seconds
+PRICE_UPDATE_INTERVAL_SECONDS = 30  # 30 seconds - permanenter Kurs-Abruf für aktive Bots
 
 # Trading Strategy Constants
 DEFAULT_FAST_MA_PERIOD = 20
