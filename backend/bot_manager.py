@@ -2309,6 +2309,155 @@ class BotManager:
         for bot_id, bot in self.bots.items():
             statuses[bot_id] = await bot.get_status()
         return statuses
+    
+    def get_current_prices(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Gibt den aktuellen Preis-Cache zurück.
+        Enthält die neuesten Kurse für alle aktiven Bot-Symbole.
+        
+        Returns:
+            Dict mit Symbolen als Keys und {"price": float, "timestamp": datetime, "bot_ids": [str]} als Values
+        """
+        return self.price_cache.copy()
+    
+    def get_current_price_for_symbol(self, symbol: str) -> Optional[float]:
+        """
+        Gibt den aktuellen Kurs für ein Symbol zurück (aus Cache).
+        
+        Args:
+            symbol: Trading-Symbol (z.B. "BTCUSDT")
+        
+        Returns:
+            Aktueller Kurs oder None wenn nicht verfügbar
+        """
+        symbol_data = self.price_cache.get(symbol)
+        if symbol_data:
+            return symbol_data.get("price")
+        return None
+    
+    async def start_price_update_loop(self):
+        """
+        Startet den permanenten Kurs-Update-Loop (alle 30 Sekunden).
+        Ruft Kurse für alle aktiven Bots ab und informiert CypherTrade.
+        """
+        if self.price_update_task is not None:
+            logger.warning("Price update loop already running")
+            return
+        
+        logger.info("Starting permanent price update loop (every 30 seconds)")
+        self.price_update_task = asyncio.create_task(self._price_update_loop())
+    
+    async def stop_price_update_loop(self):
+        """Stoppt den permanenten Kurs-Update-Loop."""
+        if self.price_update_task:
+            self.price_update_task.cancel()
+            try:
+                await self.price_update_task
+            except asyncio.CancelledError:
+                pass
+            self.price_update_task = None
+            logger.info("Price update loop stopped")
+    
+    async def _price_update_loop(self):
+        """
+        Permanenter Loop der alle 30 Sekunden die Kurse für alle aktiven Bots abruft.
+        Informiert CypherTrade über die aktuellen Kurse.
+        """
+        logger.info("Price update loop started - fetching prices every 30 seconds for active bots")
+        
+        while True:
+            try:
+                await asyncio.sleep(PRICE_UPDATE_INTERVAL_SECONDS)
+                
+                # Hole alle aktiven Bots
+                active_bots = {bot_id: bot for bot_id, bot in self.bots.items() if bot.is_running and bot.current_config}
+                
+                if not active_bots:
+                    # Keine aktiven Bots - Cache leeren
+                    if self.price_cache:
+                        self.price_cache.clear()
+                    continue
+                
+                # Sammle alle eindeutigen Symbole von aktiven Bots
+                symbols = set()
+                symbol_to_bot_ids: Dict[str, List[str]] = {}
+                
+                for bot_id, bot in active_bots.items():
+                    symbol = bot.current_config.get("symbol")
+                    if symbol:
+                        symbols.add(symbol)
+                        if symbol not in symbol_to_bot_ids:
+                            symbol_to_bot_ids[symbol] = []
+                        symbol_to_bot_ids[symbol].append(bot_id)
+                
+                if not symbols:
+                    continue
+                
+                # Erstelle Binance-Client falls nötig
+                binance_client = None
+                for bot in active_bots.values():
+                    if bot.binance_client:
+                        binance_client = bot.binance_client
+                        break
+                
+                if not binance_client:
+                    # Erstelle temporären Client
+                    try:
+                        binance_client = BinanceClientWrapper()
+                    except Exception as e:
+                        logger.error(f"Could not create Binance client for price updates: {e}")
+                        continue
+                
+                # Rufe Kurse für alle Symbole ab
+                updated_prices = {}
+                price_updates_message = []
+                
+                for symbol in symbols:
+                    try:
+                        current_price = binance_client.get_current_price(symbol)
+                        if current_price and current_price > 0:
+                            # Update Cache
+                            updated_prices[symbol] = {
+                                "price": current_price,
+                                "timestamp": datetime.now(timezone.utc),
+                                "bot_ids": symbol_to_bot_ids[symbol]
+                            }
+                            
+                            # Prüfe ob sich der Kurs geändert hat (für Logging)
+                            old_price_data = self.price_cache.get(symbol)
+                            if old_price_data:
+                                old_price = old_price_data.get("price")
+                                if old_price and old_price != current_price:
+                                    change_percent = ((current_price - old_price) / old_price) * 100
+                                    price_updates_message.append(f"{symbol}: {current_price:.8f} USDT ({change_percent:+.2f}%)")
+                                else:
+                                    price_updates_message.append(f"{symbol}: {current_price:.8f} USDT (unverändert)")
+                            else:
+                                price_updates_message.append(f"{symbol}: {current_price:.8f} USDT (neu)")
+                    except Exception as e:
+                        logger.warning(f"Could not fetch price for {symbol}: {e}")
+                        continue
+                
+                # Update Cache
+                self.price_cache.update(updated_prices)
+                
+                # Informiere CypherTrade über aktualisierte Kurse
+                if price_updates_message and self.agent_manager:
+                    price_info = "\n".join(price_updates_message)
+                    await self.agent_manager.log_agent_message(
+                        "CypherTrade",
+                        f"📊 AKTUELLE KURSE (aktualisiert):\n{price_info}\n\nDiese Kurse sind permanent verfügbar (Update alle 30 Sekunden).",
+                        "price_update"
+                    )
+                    logger.debug(f"Price update sent to CypherTrade: {len(updated_prices)} symbols updated")
+                
+            except asyncio.CancelledError:
+                logger.info("Price update loop cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in price update loop: {e}", exc_info=True)
+                # Warte kurz bevor nächster Versuch
+                await asyncio.sleep(5)
 
 # Legacy function for backward compatibility
 bot_instance: Optional[TradingBot] = None
