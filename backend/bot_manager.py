@@ -550,6 +550,15 @@ class TradingBot:
             current_price = self.binance_client.get_current_price(symbol)
             trading_mode = self.current_config.get("trading_mode", "SPOT")
             
+            # KRITISCH: Prüfe ob Preise verfügbar sind bevor Division
+            if current_price is None or current_price <= 0:
+                logger.warning(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for stop loss check, skipping")
+                return
+            
+            if self.position_entry_price is None or self.position_entry_price <= 0:
+                logger.warning(f"Bot {self.bot_id}: Invalid position_entry_price ({self.position_entry_price}) for stop loss check, skipping")
+                return
+            
             # Calculate P&L percentage
             if self.position == "LONG":
                 pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
@@ -983,7 +992,8 @@ class TradingBot:
             pnl_percent = trade.get("pnl_percent")
             
             # Calculate pnl_percent if not available in trade dict
-            if pnl_percent is None and entry_price > 0:
+            # KRITISCH: Prüfe ob beide Preise verfügbar sind bevor Division
+            if pnl_percent is None and entry_price > 0 and exit_price is not None and exit_price > 0:
                 pnl_percent = ((exit_price - entry_price) / entry_price) * 100
             
             # Determine outcome based on P&L (both absolute and percentage)
@@ -1301,13 +1311,18 @@ class TradingBot:
                 current_price = self.binance_client.get_current_price(symbol)
                 trading_mode = self.current_config.get("trading_mode", "SPOT")
                 
-                # Calculate P&L percentage
-                if self.position == "LONG":
-                    pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
-                elif self.position == "SHORT":
-                    pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
-                else:
+                # KRITISCH: Prüfe ob current_price verfügbar ist bevor Division
+                if current_price is None or current_price <= 0:
+                    logger.warning(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for position check, skipping")
                     pnl_percent = 0
+                else:
+                    # Calculate P&L percentage
+                    if self.position == "LONG":
+                        pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                    elif self.position == "SHORT":
+                        pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
+                    else:
+                        pnl_percent = 0
                 
                 # If position is at stop loss, close it first (trailing stop is handled in _check_stop_loss_and_take_profit)
                 if pnl_percent <= STOP_LOSS_PERCENT:
@@ -1584,6 +1599,25 @@ class TradingBot:
                     # Get current price
                     current_price = self.binance_client.get_current_price(symbol)
                     
+                    # KRITISCH: Prüfe ob Preise verfügbar sind bevor Division
+                    if current_price is None or current_price <= 0:
+                        logger.error(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for SELL, skipping trade")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ SELL signal BLOCKED: Invalid current price ({current_price}). Cannot execute trade without valid price data.",
+                            "error"
+                        )
+                        return
+                    
+                    if self.position_entry_price is None or self.position_entry_price <= 0:
+                        logger.error(f"Bot {self.bot_id}: Invalid position_entry_price ({self.position_entry_price}) for SELL, skipping trade")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ SELL signal BLOCKED: Invalid entry price ({self.position_entry_price}). Cannot execute trade without valid entry price.",
+                            "error"
+                        )
+                        return
+                    
                     # CRITICAL: Validate that we're not selling at a loss (unless it's a forced close due to stop loss)
                     # Check if current price is below entry price (we would make a loss)
                     if current_price < self.position_entry_price:
@@ -1725,7 +1759,8 @@ class TradingBot:
                     pnl = None
                     pnl_percent = None
                     exit_reason = "SIGNAL"  # Default: closed by signal
-                    if self.position_entry_price > 0:
+                    # KRITISCH: Prüfe ob beide Preise verfügbar sind bevor Division
+                    if self.position_entry_price > 0 and execution_price is not None and execution_price > 0:
                         pnl = (execution_price - self.position_entry_price) * quantity
                         pnl_percent = ((execution_price - self.position_entry_price) / self.position_entry_price) * 100
                         
@@ -1819,6 +1854,25 @@ class TradingBot:
                 elif self.position == "SHORT":
                     # We have a SHORT position - close it by buying
                     current_price = self.binance_client.get_current_price(symbol)
+                    
+                    # KRITISCH: Prüfe ob Preise verfügbar sind bevor Division
+                    if current_price is None or current_price <= 0:
+                        logger.error(f"Bot {self.bot_id}: Invalid current_price ({current_price}) for BUY to close SHORT, skipping trade")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ BUY to close SHORT signal BLOCKED: Invalid current price ({current_price}). Cannot execute trade without valid price data.",
+                            "error"
+                        )
+                        return
+                    
+                    if self.position_entry_price is None or self.position_entry_price <= 0:
+                        logger.error(f"Bot {self.bot_id}: Invalid position_entry_price ({self.position_entry_price}) for BUY to close SHORT, skipping trade")
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ BUY to close SHORT signal BLOCKED: Invalid entry price ({self.position_entry_price}). Cannot execute trade without valid entry price.",
+                            "error"
+                        )
+                        return
                     
                     # CRITICAL: Validate minimum profit requirement (2% minimum) for SHORT positions
                     # For SHORT: profit when price goes down (entry_price > current_price)
@@ -2096,7 +2150,8 @@ class TradingBot:
                     quote_asset = BinanceClientWrapper.extract_quote_asset(symbol)
                     balance = self.binance_client.get_account_balance(quote_asset, trading_mode=self.current_config.get("trading_mode", "SPOT"))
                     amount_to_use = min(amount_usdt, balance)
-                    if current_price <= 0:
+                    # KRITISCH: Prüfe ob current_price gültig ist bevor Division
+                    if current_price is None or current_price <= 0:
                         return {"success": False, "message": f"Invalid current price for {symbol}: {current_price}. Cannot calculate quantity."}
                     quantity = amount_to_use / current_price
                 elif side == "SELL":
@@ -2214,7 +2269,8 @@ class TradingBot:
                     if current_price:
                         value_usdt = self.position_size * current_price
                         
-                        if self.position_entry_price > 0:
+                        # KRITISCH: Prüfe ob Preise verfügbar sind bevor Division
+                        if self.position_entry_price > 0 and current_price is not None and current_price > 0:
                             if self.position == "LONG":
                                 unrealized_pnl = (current_price - self.position_entry_price) * self.position_size
                                 unrealized_pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
@@ -2427,7 +2483,8 @@ class BotManager:
                             old_price_data = self.price_cache.get(symbol)
                             if old_price_data:
                                 old_price = old_price_data.get("price")
-                                if old_price and old_price != current_price:
+                                # KRITISCH: Prüfe ob old_price gültig ist bevor Division
+                                if old_price and old_price > 0 and old_price != current_price:
                                     change_percent = ((current_price - old_price) / old_price) * 100
                                     price_updates_message.append(f"{symbol}: {current_price:.8f} USDT ({change_percent:+.2f}%)")
                                 else:
