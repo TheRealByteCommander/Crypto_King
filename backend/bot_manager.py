@@ -1545,12 +1545,25 @@ class TradingBot:
                 )
                 
                 # Update position tracking (use execution_price instead of current_price)
+                # KRITISCH: execution_price wurde bereits validiert - sollte niemals None oder <= 0 sein!
+                if execution_price is None or execution_price <= 0:
+                    error_msg = f"KRITISCHER FEHLER: execution_price ist ungültig ({execution_price}) beim Setzen von position_entry_price. Trade wird abgebrochen."
+                    logger.error(f"Bot {self.bot_id}: {error_msg}")
+                    await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
+                    return
+                
                 if self.position == "LONG":
                     # Add to existing position
                     self.position_size += quantity
                     # Update entry price (weighted average)
-                    total_value = (self.position_size - quantity) * self.position_entry_price + quantity * execution_price
-                    self.position_entry_price = total_value / self.position_size if self.position_size > 0 else execution_price
+                    # KRITISCH: Prüfe position_size > 0 bevor Division
+                    if self.position_size > 0:
+                        total_value = (self.position_size - quantity) * self.position_entry_price + quantity * execution_price
+                        self.position_entry_price = total_value / self.position_size
+                    else:
+                        # Fallback falls position_size ungültig (sollte nicht passieren)
+                        logger.warning(f"Bot {self.bot_id}: position_size ist 0, verwende execution_price direkt")
+                        self.position_entry_price = execution_price
                     # Update high price if execution price is higher
                     if execution_price > self.position_high_price:
                         self.position_high_price = execution_price
@@ -2042,6 +2055,13 @@ class TradingBot:
                             execution_price = self._get_execution_price_from_order(order, symbol, current_price)
                         except ValueError as e:
                             error_msg = f"SHORT Position öffnen fehlgeschlagen: {str(e)}"
+                            logger.error(f"Bot {self.bot_id}: {error_msg}")
+                            await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
+                            return
+                        
+                        # KRITISCH: Validiere execution_price BEVOR position_entry_price gesetzt wird!
+                        if execution_price is None or execution_price <= 0:
+                            error_msg = f"SHORT Position öffnen fehlgeschlagen: Ungültiger execution_price ({execution_price}) nach _get_execution_price_from_order. Trade wird abgebrochen."
                             logger.error(f"Bot {self.bot_id}: {error_msg}")
                             await self.agent_manager.log_agent_message("CypherTrade", f"❌ {error_msg}", "error")
                             return

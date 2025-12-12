@@ -320,16 +320,33 @@ class BinanceClientWrapper:
             logger.error(f"Error getting order status: {e}")
             raise
     
-    def get_current_price(self, symbol: str) -> float:
-        """Get current price for a symbol."""
+    def get_current_price(self, symbol: str) -> Optional[float]:
+        """
+        Get current price for a symbol.
+        
+        Returns:
+            Current price as float, or None if price cannot be retrieved.
+            Returns None instead of raising exception to allow graceful error handling.
+        """
         try:
             ticker = self.client.get_symbol_ticker(symbol=symbol)
+            if not ticker or 'price' not in ticker:
+                logger.error(f"Invalid ticker response for {symbol}: {ticker}")
+                return None
+            
             price = float(ticker['price'])
-            logger.info(f"Current price for {symbol}: {price}")
+            if price <= 0:
+                logger.error(f"Invalid price for {symbol}: {price}")
+                return None
+            
+            logger.debug(f"Current price for {symbol}: {price}")
             return price
+        except BinanceAPIException as e:
+            logger.error(f"Binance API error getting current price for {symbol}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Error getting current price: {e}")
-            raise
+            logger.error(f"Error getting current price for {symbol}: {e}")
+            return None
     
     def get_24h_ticker_stats(self) -> List[Dict[str, Any]]:
         """Get 24h ticker statistics for all symbols."""
