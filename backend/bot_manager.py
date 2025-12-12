@@ -1941,7 +1941,8 @@ class TradingBot:
                     pnl = None
                     pnl_percent = None
                     exit_reason = "SIGNAL"  # Default: closed by signal
-                    if self.position_entry_price > 0:
+                    # KRITISCH: Prüfe ob beide Preise verfügbar sind bevor Division
+                    if self.position_entry_price > 0 and execution_price is not None and execution_price > 0:
                         pnl = (self.position_entry_price - execution_price) * quantity
                         pnl_percent = ((self.position_entry_price - execution_price) / self.position_entry_price) * 100
                         
