@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, List
 from binance_client import BinanceClientWrapper
 from binance.exceptions import BinanceAPIException
 from trading_pairs_cache import get_trading_pairs_cache
+import httpx
 
 # Optional imports for news and coin analysis features
 try:
@@ -921,6 +922,77 @@ class AgentTools:
                 except Exception as e:
                     logger.error(f"Error fetching crypto news: {e}", exc_info=True)
                     return {"error": f"Error fetching news: {str(e)}", "success": False}
+            
+            elif tool_name == "search_trading_information":
+                # Web search for trading information
+                query = parameters.get("query", "")
+                max_results = parameters.get("max_results", 5)
+                
+                if not query:
+                    return {"error": "Search query is required", "success": False}
+                
+                try:
+                    # Use DuckDuckGo Instant Answer API (free, no API key required)
+                    # Fallback to a simple web search approach
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        # Try DuckDuckGo HTML search (simple approach)
+                        search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}"
+                        headers = {
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                        }
+                        
+                        response = await client.get(search_url, headers=headers, follow_redirects=True)
+                        response.raise_for_status()
+                        
+                        # Parse HTML results (simple extraction)
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        
+                        results = []
+                        # Extract search results (DuckDuckGo HTML structure)
+                        result_divs = soup.find_all('div', class_='result')[:max_results]
+                        
+                        for div in result_divs:
+                            title_elem = div.find('a', class_='result__a')
+                            snippet_elem = div.find('a', class_='result__snippet')
+                            
+                            if title_elem:
+                                title = title_elem.get_text(strip=True)
+                                url = title_elem.get('href', '')
+                                snippet = snippet_elem.get_text(strip=True) if snippet_elem else ""
+                                
+                                results.append({
+                                    "title": title,
+                                    "url": url,
+                                    "snippet": snippet
+                                })
+                        
+                        if results:
+                            return {
+                                "success": True,
+                                "query": query,
+                                "results": results,
+                                "count": len(results),
+                                "message": f"Found {len(results)} results for '{query}'"
+                            }
+                        else:
+                            # Fallback: return a message that search was attempted
+                            return {
+                                "success": True,
+                                "query": query,
+                                "results": [],
+                                "count": 0,
+                                "message": f"Search completed for '{query}' but no results found. Try a different query or check if information is available from other sources."
+                            }
+                
+                except Exception as e:
+                    logger.error(f"Error searching for trading information: {e}", exc_info=True)
+                    return {
+                        "success": False,
+                        "error": f"Search failed: {str(e)}",
+                        "query": query,
+                        "message": f"Could not search for '{query}'. Please try a different query or use other available tools."
+                    }
             
             elif tool_name == "share_news_with_agents":
                 try:

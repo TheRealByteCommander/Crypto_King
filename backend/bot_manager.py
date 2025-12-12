@@ -17,7 +17,8 @@ from constants import (
     STOP_LOSS_PERCENT,
     TAKE_PROFIT_MIN_PERCENT,
     TAKE_PROFIT_TRAILING_PERCENT,
-    LOW_PROFIT_THRESHOLD
+    LOW_PROFIT_THRESHOLD,
+    MIN_HOLDING_TIME_MINUTES
 )
 import json
 
@@ -52,6 +53,7 @@ class TradingBot:
         self.position_size = 0.0  # Quantity of base asset in position
         self.position_entry_price = 0.0  # Entry price for current position
         self.position_high_price = 0.0  # Highest price since entry (for trailing stop take profit)
+        self.position_entry_time = None  # Timestamp when position was opened (for minimum holding time check)
         # Market phase analysis
         self.market_phase_analyzer = MarketPhaseAnalyzer()
         self.current_market_phase = None  # "BULLISH", "BEARISH", "SIDEWAYS"
@@ -530,6 +532,36 @@ class TradingBot:
             self.position_size = 0.0
             self.position_entry_price = 0.0
             self.position_high_price = 0.0
+            self.position_entry_time = None
+    
+    def _check_minimum_holding_time(self, is_stop_loss: bool = False) -> tuple[bool, Optional[float]]:
+        """
+        Prüft ob die Mindest-Haltedauer erreicht wurde.
+        
+        Args:
+            is_stop_loss: Wenn True, wird die Mindest-Haltedauer ignoriert (Stop-Loss hat Priorität)
+        
+        Returns:
+            (is_valid, holding_time_minutes): True wenn Haltedauer erreicht oder Stop-Loss, sonst False
+        """
+        if self.position_entry_time is None:
+            # Keine Position oder Entry-Time nicht gesetzt - erlaube Verkauf (sollte nicht passieren)
+            logger.warning(f"Bot {self.bot_id}: position_entry_time is None - allowing sell (should not happen)")
+            return True, None
+        
+        if is_stop_loss:
+            # Stop-Loss hat immer Priorität - ignoriere Mindest-Haltedauer
+            return True, None
+        
+        # Berechne Haltedauer
+        holding_time = datetime.now(timezone.utc) - self.position_entry_time
+        holding_time_minutes = holding_time.total_seconds() / 60
+        
+        if holding_time_minutes < MIN_HOLDING_TIME_MINUTES:
+            remaining_minutes = MIN_HOLDING_TIME_MINUTES - holding_time_minutes
+            return False, remaining_minutes
+        
+        return True, holding_time_minutes
     
     async def _check_stop_loss_and_take_profit(self, symbol: str, analysis: Dict[str, Any]):
         """Check if stop loss or take profit should be triggered for current position."""
@@ -747,6 +779,7 @@ class TradingBot:
                         self.position_size = 0.0
                         self.position_entry_price = 0.0
                         self.position_high_price = 0.0
+                        self.position_entry_time = None
                         
                         logger.info(f"Bot {self.bot_id}: STOP LOSS executed - BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
                         await self.agent_manager.log_agent_message(
@@ -767,7 +800,9 @@ class TradingBot:
                 # 1. Current price must be below trailing trigger (3% drop from high)
                 # 2. We must be at least 2% in profit (pnl_percent >= TAKE_PROFIT_MIN_PERCENT)
                 # 3. CRITICAL: Current P&L must still be positive (not negative) - prevent selling at loss
-                if current_price <= trailing_trigger_price and pnl_percent >= TAKE_PROFIT_MIN_PERCENT and pnl_percent > 0:
+                # 4. Mindest-Haltedauer muss erreicht sein
+                holding_time_valid, _ = self._check_minimum_holding_time(is_stop_loss=False)
+                if current_price <= trailing_trigger_price and pnl_percent >= TAKE_PROFIT_MIN_PERCENT and pnl_percent > 0 and holding_time_valid:
                     logger.info(
                         f"Bot {self.bot_id}: TRAILING STOP TAKE PROFIT triggered! "
                         f"Position: {self.position}, Entry: {self.position_entry_price:.8f}, "
@@ -952,6 +987,7 @@ class TradingBot:
                         self.position_size = 0.0
                         self.position_entry_price = 0.0
                         self.position_high_price = 0.0
+                        self.position_entry_time = None
                         
                         logger.info(f"Bot {self.bot_id}: TAKE PROFIT executed - BUY {quantity} {symbol} to close SHORT at {current_price} USDT (P&L: {pnl:+.2f} USDT, {pnl_percent_final:+.2f}%)")
                         await self.agent_manager.log_agent_message(
@@ -1533,6 +1569,7 @@ class TradingBot:
                     self.position_size = quantity
                     self.position_entry_price = execution_price
                     self.position_high_price = execution_price  # Initialize high price to entry price
+                    self.position_entry_time = datetime.now(timezone.utc)  # Track entry time for minimum holding period
                     
                     # Start Position-Tracking für neue Position
                     if self.candle_tracker:
@@ -1595,6 +1632,26 @@ class TradingBot:
                     # CRITICAL: Validate minimum profit requirement (2% minimum)
                     # Calculate current profit percentage
                     pnl_percent = ((current_price - self.position_entry_price) / self.position_entry_price) * 100
+                    
+                    # KRITISCH: Prüfe Mindest-Haltedauer (außer bei Stop-Loss, der bereits früher geprüft wurde)
+                    holding_time_valid, holding_info = self._check_minimum_holding_time(is_stop_loss=False)
+                    if not holding_time_valid:
+                        remaining_minutes = holding_info
+                        logger.warning(
+                            f"Bot {self.bot_id}: ⚠️ SELL signal BLOCKED - Minimum holding time not reached: "
+                            f"Position held for {MIN_HOLDING_TIME_MINUTES - remaining_minutes:.1f} minutes, "
+                            f"minimum required: {MIN_HOLDING_TIME_MINUTES} minutes. "
+                            f"Remaining: {remaining_minutes:.1f} minutes. "
+                            f"Current profit: {pnl_percent:.2f}%."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ SELL signal BLOCKED: Minimum holding time not reached. "
+                            f"Position must be held for at least {MIN_HOLDING_TIME_MINUTES} minutes. "
+                            f"Remaining: {remaining_minutes:.1f} minutes.",
+                            "warning"
+                        )
+                        return
                     
                     # Block SELL if profit is below minimum threshold (unless it's stop loss, which is checked earlier)
                     if pnl_percent < TAKE_PROFIT_MIN_PERCENT:
@@ -1812,6 +1869,26 @@ class TradingBot:
                     pnl_percent = ((self.position_entry_price - current_price) / self.position_entry_price) * 100
                     
                     # Block BUY to close SHORT if profit is below minimum threshold (unless it's stop loss, which is checked earlier)
+                    # KRITISCH: Prüfe Mindest-Haltedauer (außer bei Stop-Loss, der bereits früher geprüft wurde)
+                    holding_time_valid, holding_info = self._check_minimum_holding_time(is_stop_loss=False)
+                    if not holding_time_valid:
+                        remaining_minutes = holding_info
+                        logger.warning(
+                            f"Bot {self.bot_id}: ⚠️ BUY to close SHORT signal BLOCKED - Minimum holding time not reached: "
+                            f"Position held for {MIN_HOLDING_TIME_MINUTES - remaining_minutes:.1f} minutes, "
+                            f"minimum required: {MIN_HOLDING_TIME_MINUTES} minutes. "
+                            f"Remaining: {remaining_minutes:.1f} minutes. "
+                            f"Current profit: {pnl_percent:.2f}%."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ BUY to close SHORT signal BLOCKED: Minimum holding time not reached. "
+                            f"Position must be held for at least {MIN_HOLDING_TIME_MINUTES} minutes. "
+                            f"Remaining: {remaining_minutes:.1f} minutes.",
+                            "warning"
+                        )
+                        return
+                    
                     if pnl_percent < TAKE_PROFIT_MIN_PERCENT:
                         logger.warning(
                             f"Bot {self.bot_id}: ⚠️ BUY to close SHORT signal BLOCKED - Profit too low: "
@@ -2019,6 +2096,7 @@ class TradingBot:
                         
                         # Update position tracking - SHORT position opened
                         self.position = "SHORT"
+                        self.position_entry_time = datetime.now(timezone.utc)  # Track entry time for minimum holding period
                         self.position_size = quantity
                         self.position_entry_price = execution_price
                         
