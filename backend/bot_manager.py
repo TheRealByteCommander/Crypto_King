@@ -641,6 +641,8 @@ class TradingBot:
                                 logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                             
                             # Save trade
+                            # KRITISCH: entry_price sollte der ursprüngliche Einstiegspreis sein!
+                            old_entry_price = self.position_entry_price
                             trade = {
                                 "bot_id": self.bot_id,
                                 "symbol": symbol,
@@ -650,8 +652,8 @@ class TradingBot:
                                 "status": order.get("status", ""),
                                 "executed_qty": float(order.get("executedQty", 0)),
                                 "quote_qty": quote_qty,  # USDT value - always set correctly
-                                "entry_price": execution_price,
-                                "execution_price": execution_price,
+                                "entry_price": old_entry_price if old_entry_price > 0 else execution_price,  # Original entry price!
+                                "execution_price": execution_price,  # Actual exit price
                                 "strategy": self.current_config["strategy"],
                                 "trading_mode": trading_mode,
                                 "confidence": analysis.get("confidence", 0.0),
@@ -660,9 +662,13 @@ class TradingBot:
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
                                 "pnl": pnl,
                                 "pnl_percent": pnl_percent_final,
-                                "position_entry_price": self.position_entry_price
+                                "position_entry_price": old_entry_price
                             }
                             await self.db.trades.insert_one(trade)
+                            
+                            # Learn from closed position
+                            if pnl is not None and old_entry_price > 0:
+                                await self._learn_from_closed_position(trade, pnl, old_entry_price, execution_price)
                             
                             # Stop Position-Tracking before resetting position
                             if self.candle_tracker:
@@ -733,6 +739,8 @@ class TradingBot:
                             logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                         
                         # Save trade
+                        # KRITISCH: entry_price sollte der ursprüngliche Einstiegspreis sein!
+                        old_entry_price = self.position_entry_price
                         trade = {
                             "bot_id": self.bot_id,
                             "symbol": symbol,
@@ -742,8 +750,8 @@ class TradingBot:
                             "status": order.get("status", ""),
                             "executed_qty": float(order.get("executedQty", 0)),
                             "quote_qty": quote_qty,  # USDT value - always set correctly
-                            "entry_price": execution_price,
-                            "execution_price": execution_price,
+                            "entry_price": old_entry_price if old_entry_price > 0 else execution_price,  # Original entry price!
+                            "execution_price": execution_price,  # Actual exit price
                             "strategy": self.current_config["strategy"],
                             "trading_mode": trading_mode,
                             "position_type": "SHORT_CLOSE",
@@ -753,9 +761,13 @@ class TradingBot:
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "pnl": pnl,
                             "pnl_percent": pnl_percent_final,
-                            "position_entry_price": self.position_entry_price
+                            "position_entry_price": old_entry_price
                         }
                         await self.db.trades.insert_one(trade)
+                        
+                        # Learn from closed position
+                        if pnl is not None and old_entry_price > 0:
+                            await self._learn_from_closed_position(trade, pnl, old_entry_price, execution_price)
                         
                         # Learn from closed position
                         if pnl is not None:
@@ -854,6 +866,8 @@ class TradingBot:
                                 logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                             
                             # Save trade
+                            # KRITISCH: entry_price sollte der ursprüngliche Einstiegspreis sein!
+                            old_entry_price = self.position_entry_price
                             trade = {
                                 "bot_id": self.bot_id,
                                 "symbol": symbol,
@@ -863,9 +877,9 @@ class TradingBot:
                                 "status": order.get("status", ""),
                                 "executed_qty": float(order.get("executedQty", 0)),
                                 "quote_qty": quote_qty,  # USDT value - always set correctly
-                                "entry_price": execution_price,
-                                "exit_price": execution_price,
-                                "execution_price": execution_price,
+                                "entry_price": old_entry_price if old_entry_price > 0 else execution_price,  # Original entry price!
+                                "exit_price": execution_price,  # Actual exit price
+                                "execution_price": execution_price,  # Actual exit price
                                 "strategy": self.current_config["strategy"],
                                 "trading_mode": trading_mode,
                                 "confidence": analysis.get("confidence", 0.0),
@@ -874,9 +888,13 @@ class TradingBot:
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
                                 "pnl": pnl,
                                 "pnl_percent": pnl_percent_final,
-                                "position_entry_price": self.position_entry_price
+                                "position_entry_price": old_entry_price
                             }
                             await self.db.trades.insert_one(trade)
+                            
+                            # Learn from closed position
+                            if pnl is not None and old_entry_price > 0:
+                                await self._learn_from_closed_position(trade, pnl, old_entry_price, execution_price)
                             
                             # Stop Position-Tracking before resetting position
                             if self.candle_tracker:
@@ -939,6 +957,8 @@ class TradingBot:
                             logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                         
                         # Save trade
+                        # KRITISCH: entry_price sollte der ursprüngliche Einstiegspreis sein!
+                        old_entry_price = self.position_entry_price
                         trade = {
                             "bot_id": self.bot_id,
                             "symbol": symbol,
@@ -948,8 +968,8 @@ class TradingBot:
                             "status": order.get("status", ""),
                             "executed_qty": float(order.get("executedQty", 0)),
                             "quote_qty": quote_qty,  # USDT value - always set correctly
-                            "entry_price": execution_price,
-                            "execution_price": execution_price,
+                            "entry_price": old_entry_price if old_entry_price > 0 else execution_price,  # Original entry price!
+                            "execution_price": execution_price,  # Actual exit price
                             "strategy": self.current_config["strategy"],
                             "trading_mode": trading_mode,
                             "position_type": "SHORT_CLOSE",
@@ -959,13 +979,14 @@ class TradingBot:
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "pnl": pnl,
                             "pnl_percent": pnl_percent_final,
-                            "position_entry_price": self.position_entry_price
+                            "position_entry_price": old_entry_price
                         }
                         await self.db.trades.insert_one(trade)
                         
                         # Learn from closed position
-                        if pnl is not None:
-                            await self._learn_from_closed_position(trade, pnl, self.position_entry_price, current_price)
+                        # KRITISCH: Verwende execution_price (tatsächlicher Verkaufspreis) statt current_price
+                        if pnl is not None and old_entry_price > 0:
+                            await self._learn_from_closed_position(trade, pnl, old_entry_price, execution_price)
                         
                         # Reset position
                         self.position = None
@@ -1795,6 +1816,8 @@ class TradingBot:
                         logger.debug(f"Bot {self.bot_id}: quote_qty not in order response, calculated: {quote_qty:.2f} USDT (price: {execution_price}, qty: {quantity})")
                     
                     # Save trade
+                    # KRITISCH: entry_price sollte der ursprüngliche Einstiegspreis sein, nicht der Verkaufspreis!
+                    old_entry_price = self.position_entry_price
                     trade = {
                         "bot_id": self.bot_id,
                         "symbol": symbol,
@@ -1804,9 +1827,9 @@ class TradingBot:
                         "status": order.get("status", ""),
                         "executed_qty": float(order.get("executedQty", 0)),
                         "quote_qty": quote_qty,  # USDT value - always set correctly
-                        "entry_price": execution_price,  # Use actual execution price
+                        "entry_price": old_entry_price if old_entry_price > 0 else execution_price,  # Original entry price, not execution price!
                         "decision_price": decision_price if decision_price else None,  # Price at signal generation
-                        "execution_price": execution_price,  # Actual execution price
+                        "execution_price": execution_price,  # Actual execution price (exit price)
                         "price_slippage": price_slippage,  # Price difference
                         "price_slippage_percent": price_slippage_percent,  # Slippage in %
                         "decision_timestamp": decision_timestamp.isoformat() if decision_timestamp else None,
@@ -1823,15 +1846,14 @@ class TradingBot:
                     if pnl is not None:
                         trade["pnl"] = pnl
                         trade["pnl_percent"] = pnl_percent
-                        trade["position_entry_price"] = self.position_entry_price
+                        trade["position_entry_price"] = old_entry_price
                     
                     await self.db.trades.insert_one(trade)
                     
                     # Learn from closed position (if P&L is available)
-                    # Store entry price before resetting position
-                    old_entry_price = self.position_entry_price
+                    # KRITISCH: Verwende execution_price (tatsächlicher Verkaufspreis) statt current_price
                     if pnl is not None and old_entry_price > 0:
-                        await self._learn_from_closed_position(trade, pnl, old_entry_price, current_price)
+                        await self._learn_from_closed_position(trade, pnl, old_entry_price, execution_price)
                     
                     # Stop Position-Tracking before resetting position
                     if self.candle_tracker:
@@ -1968,6 +1990,8 @@ class TradingBot:
                             logger.info(f"Bot {self.bot_id}: BUY to close SHORT executed but position was at {pnl_percent:.2f}% (Take-Profit threshold: >= {TAKE_PROFIT_MIN_PERCENT}%). Marking as TAKE_PROFIT.")
                     
                     # Save trade
+                    # KRITISCH: entry_price sollte der ursprüngliche Einstiegspreis sein, nicht der Verkaufspreis!
+                    old_entry_price = self.position_entry_price
                     trade = {
                         "bot_id": self.bot_id,
                         "symbol": symbol,
@@ -1977,9 +2001,9 @@ class TradingBot:
                         "status": order.get("status", ""),
                         "executed_qty": float(order.get("executedQty", 0)),
                         "quote_qty": float(order.get("cummulativeQuoteQty", 0)),
-                        "entry_price": execution_price,  # Use actual execution price
+                        "entry_price": old_entry_price if old_entry_price > 0 else execution_price,  # Original entry price, not execution price!
                         "decision_price": decision_price if decision_price else None,
-                        "execution_price": execution_price,
+                        "execution_price": execution_price,  # Actual execution price (exit price)
                         "price_slippage": price_slippage,
                         "price_slippage_percent": price_slippage_percent,
                         "decision_timestamp": decision_timestamp.isoformat() if decision_timestamp else None,
@@ -1997,15 +2021,14 @@ class TradingBot:
                     if pnl is not None:
                         trade["pnl"] = pnl
                         trade["pnl_percent"] = pnl_percent
-                        trade["position_entry_price"] = self.position_entry_price
+                        trade["position_entry_price"] = old_entry_price
                     
                     await self.db.trades.insert_one(trade)
                     
                     # Learn from closed position (if P&L is available)
-                    # Store entry price before resetting position
-                    old_entry_price = self.position_entry_price
+                    # KRITISCH: Verwende execution_price (tatsächlicher Verkaufspreis) statt current_price
                     if pnl is not None and old_entry_price > 0:
-                        await self._learn_from_closed_position(trade, pnl, old_entry_price, current_price)
+                        await self._learn_from_closed_position(trade, pnl, old_entry_price, execution_price)
                     
                     # SHORT position closed
                     self.position = None
