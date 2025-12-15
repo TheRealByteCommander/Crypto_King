@@ -4,9 +4,11 @@ Agent Tools - Functions that agents can call to access real data and execute act
 
 import logging
 from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone, timedelta
 from binance_client import BinanceClientWrapper
 from binance.exceptions import BinanceAPIException
 from trading_pairs_cache import get_trading_pairs_cache
+from constants import TAKE_PROFIT_MIN_PERCENT, STOP_LOSS_PERCENT
 import httpx
 
 # Optional imports for news and coin analysis features
@@ -739,23 +741,57 @@ class AgentTools:
                 if self.bot and hasattr(self.bot, 'current_config'):
                     trading_mode = self.bot.current_config.get("trading_mode", trading_mode)
                 
-                # CRITICAL: Before executing SELL orders, ALWAYS check current price to prevent negative trades
+                # CRITICAL: Before executing SELL orders, ALWAYS check current price, profit limits, and holding period
                 if side == "SELL":
                     try:
                         # Get current price
                         current_price = self.binance_client.get_current_price(symbol)
                         
+                        if current_price is None or current_price <= 0:
+                            error_msg = f"⚠️ SELL order BLOCKED: Cannot get valid current price for {symbol}. Cannot execute SELL without price validation."
+                            logger.warning(f"Agent execute_order: {error_msg}")
+                            return {
+                                "error": error_msg,
+                                "success": False
+                            }
+                        
                         # Check if we have position tracking data
                         if self.bot and hasattr(self.bot, 'position_entry_price') and hasattr(self.bot, 'position'):
                             if self.bot.position == "LONG" and self.bot.position_entry_price > 0:
-                                # Check if selling would result in a loss
+                                # Calculate P&L percentage
+                                pnl_percent = ((current_price - self.bot.position_entry_price) / self.bot.position_entry_price) * 100
+                                
+                                # CRITICAL: Check if selling would result in a loss (Stop-Loss exception)
                                 if current_price < self.bot.position_entry_price:
-                                    pnl_percent = ((current_price - self.bot.position_entry_price) / self.bot.position_entry_price) * 100
+                                    # Only allow if it's a stop-loss situation (≤ -5%)
+                                    if pnl_percent > STOP_LOSS_PERCENT:
+                                        error_msg = (
+                                            f"⚠️ SELL order BLOCKED: Current price {current_price} is below entry price "
+                                            f"{self.bot.position_entry_price} ({pnl_percent:.2f}% loss). "
+                                            f"This would result in a negative trade. Only Stop-Loss (≤{STOP_LOSS_PERCENT}%) is allowed."
+                                        )
+                                        logger.warning(f"Agent execute_order: {error_msg}")
+                                        return {
+                                            "error": error_msg,
+                                            "success": False,
+                                            "current_price": current_price,
+                                            "entry_price": self.bot.position_entry_price,
+                                            "potential_loss_percent": pnl_percent
+                                        }
+                                    else:
+                                        # Stop-Loss situation - allow trade
+                                        logger.warning(
+                                            f"Agent execute_order: SELL allowed for Stop-Loss - "
+                                            f"Current price {current_price} < Entry price {self.bot.position_entry_price} "
+                                            f"({pnl_percent:.2f}% loss, Stop-Loss threshold: {STOP_LOSS_PERCENT}%)"
+                                        )
+                                
+                                # CRITICAL: Validate minimum profit requirement (2% minimum) - unless it's Stop-Loss
+                                elif pnl_percent < TAKE_PROFIT_MIN_PERCENT:
                                     error_msg = (
-                                        f"⚠️ SELL order BLOCKED: Current price {current_price} is below entry price "
-                                        f"{self.bot.position_entry_price} ({pnl_percent:.2f}% loss). "
-                                        f"This would result in a negative trade. Please check current market prices "
-                                        f"using get_current_price before executing SELL orders."
+                                        f"⚠️ SELL order BLOCKED: Current profit {pnl_percent:.2f}% is below minimum required "
+                                        f"{TAKE_PROFIT_MIN_PERCENT}%. Entry: {self.bot.position_entry_price}, Current: {current_price}. "
+                                        f"Position must remain open until minimum profit target is reached."
                                     )
                                     logger.warning(f"Agent execute_order: {error_msg}")
                                     return {
@@ -763,23 +799,93 @@ class AgentTools:
                                         "success": False,
                                         "current_price": current_price,
                                         "entry_price": self.bot.position_entry_price,
-                                        "potential_loss_percent": pnl_percent
+                                        "current_profit_percent": pnl_percent,
+                                        "minimum_required_profit": TAKE_PROFIT_MIN_PERCENT
                                     }
-                                else:
-                                    # Selling at profit or break-even is OK
-                                    pnl_percent = ((current_price - self.bot.position_entry_price) / self.bot.position_entry_price) * 100
-                                    logger.info(
-                                        f"Agent execute_order: SELL validated - Current price {current_price} >= "
-                                        f"Entry price {self.bot.position_entry_price} ({pnl_percent:.2f}% profit/loss)"
+                                
+                                # CRITICAL: Check minimum holding period (15 minutes)
+                                if hasattr(self.bot, 'position_entry_time') and self.bot.position_entry_time:
+                                    holding_duration = datetime.now(timezone.utc) - self.bot.position_entry_time
+                                    min_holding_minutes = 15
+                                    if holding_duration.total_seconds() < (min_holding_minutes * 60):
+                                        remaining_seconds = (min_holding_minutes * 60) - holding_duration.total_seconds()
+                                        remaining_minutes = int(remaining_seconds / 60)
+                                        error_msg = (
+                                            f"⚠️ SELL order BLOCKED: Minimum holding period not met. "
+                                            f"Position held for {holding_duration.total_seconds()/60:.1f} minutes, "
+                                            f"minimum required: {min_holding_minutes} minutes. "
+                                            f"Remaining: {remaining_minutes} minutes. "
+                                            f"(Exception: Stop-Loss at ≤{STOP_LOSS_PERCENT}% is always allowed)"
+                                        )
+                                        # Only block if it's not a Stop-Loss situation
+                                        if pnl_percent > STOP_LOSS_PERCENT:
+                                            logger.warning(f"Agent execute_order: {error_msg}")
+                                            return {
+                                                "error": error_msg,
+                                                "success": False,
+                                                "holding_duration_minutes": holding_duration.total_seconds() / 60,
+                                                "minimum_required_minutes": min_holding_minutes,
+                                                "current_profit_percent": pnl_percent
+                                            }
+                                
+                                # All validations passed
+                                logger.info(
+                                    f"Agent execute_order: SELL validated - Current price {current_price} >= "
+                                    f"Entry price {self.bot.position_entry_price} ({pnl_percent:.2f}% profit). "
+                                    f"Minimum profit requirement ({TAKE_PROFIT_MIN_PERCENT}%) met."
+                                )
+                            elif self.bot.position == "SHORT" and self.bot.position_entry_price > 0:
+                                # For SHORT positions: profit when price falls
+                                pnl_percent = ((self.bot.position_entry_price - current_price) / self.bot.position_entry_price) * 100
+                                
+                                # Check Stop-Loss (for SHORT: loss when price rises)
+                                if current_price > self.bot.position_entry_price:
+                                    if pnl_percent > STOP_LOSS_PERCENT:
+                                        error_msg = (
+                                            f"⚠️ BUY to close SHORT order BLOCKED: Current price {current_price} is above entry price "
+                                            f"{self.bot.position_entry_price} ({pnl_percent:.2f}% loss for SHORT). "
+                                            f"Only Stop-Loss (≤{STOP_LOSS_PERCENT}%) is allowed."
+                                        )
+                                        logger.warning(f"Agent execute_order: {error_msg}")
+                                        return {
+                                            "error": error_msg,
+                                            "success": False,
+                                            "current_price": current_price,
+                                            "entry_price": self.bot.position_entry_price,
+                                            "potential_loss_percent": pnl_percent
+                                        }
+                                
+                                # Validate minimum profit requirement for SHORT
+                                elif pnl_percent < TAKE_PROFIT_MIN_PERCENT:
+                                    error_msg = (
+                                        f"⚠️ BUY to close SHORT order BLOCKED: Current profit {pnl_percent:.2f}% is below minimum required "
+                                        f"{TAKE_PROFIT_MIN_PERCENT}%. Entry: {self.bot.position_entry_price}, Current: {current_price}. "
+                                        f"Position must remain open until minimum profit target is reached."
                                     )
+                                    logger.warning(f"Agent execute_order: {error_msg}")
+                                    return {
+                                        "error": error_msg,
+                                        "success": False,
+                                        "current_price": current_price,
+                                        "entry_price": self.bot.position_entry_price,
+                                        "current_profit_percent": pnl_percent,
+                                        "minimum_required_profit": TAKE_PROFIT_MIN_PERCENT
+                                    }
+                                
+                                logger.info(
+                                    f"Agent execute_order: BUY to close SHORT validated - "
+                                    f"Current price {current_price}, Entry price {self.bot.position_entry_price} "
+                                    f"({pnl_percent:.2f}% profit). Minimum profit requirement ({TAKE_PROFIT_MIN_PERCENT}%) met."
+                                )
                         else:
                             # No position tracking - log warning but allow trade (agents might be managing multiple bots)
                             logger.warning(
                                 f"Agent execute_order: SELL order for {symbol} - No position tracking data available. "
-                                f"Current price: {current_price}. Proceeding with caution."
+                                f"Current price: {current_price}. Proceeding with caution. "
+                                f"WARNING: Profit and holding period limits cannot be validated without position tracking!"
                             )
                     except Exception as e:
-                        logger.error(f"Error validating current price before SELL order: {e}")
+                        logger.error(f"Error validating current price before SELL order: {e}", exc_info=True)
                         return {
                             "error": f"Failed to validate current price before SELL order: {str(e)}. Cannot execute SELL without price validation.",
                             "success": False
