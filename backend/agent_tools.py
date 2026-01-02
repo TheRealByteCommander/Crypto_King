@@ -787,20 +787,35 @@ class AgentTools:
                                         )
                                 
                                 # CRITICAL: Validate minimum profit requirement (2% minimum) - unless it's Stop-Loss
-                                elif pnl_percent < TAKE_PROFIT_MIN_PERCENT:
-                                    error_msg = (
-                                        f"⚠️ SELL order BLOCKED: Current profit {pnl_percent:.2f}% is below minimum required "
-                                        f"{TAKE_PROFIT_MIN_PERCENT}%. Entry: {self.bot.position_entry_price}, Current: {current_price}. "
-                                        f"Position must remain open until minimum profit target is reached."
-                                    )
+                                # KRITISCH: Re-Check Preis direkt vor Validierung um sicherzustellen dass Preis aktuell ist
+                                # Der Preis könnte veraltet sein wenn er aus dem Cache kommt
+                                fresh_price_check = self.binance_client.get_current_price(symbol)
+                                if fresh_price_check is None or fresh_price_check <= 0:
+                                    error_msg = f"⚠️ SELL order BLOCKED: Cannot get valid current price for validation ({fresh_price_check})."
                                     logger.warning(f"Agent execute_order: {error_msg}")
                                     return {
                                         "error": error_msg,
+                                        "success": False
+                                    }
+                                
+                                # Re-calculate P&L mit dem aktuellsten Preis
+                                fresh_pnl_percent = ((fresh_price_check - self.bot.position_entry_price) / self.bot.position_entry_price) * 100
+                                
+                                if fresh_pnl_percent < TAKE_PROFIT_MIN_PERCENT:
+                                    error_msg = (
+                                        f"⚠️ SELL order BLOCKED: Current profit {fresh_pnl_percent:.2f}% is below minimum required "
+                                        f"{TAKE_PROFIT_MIN_PERCENT}%. Entry: {self.bot.position_entry_price}, Current: {fresh_price_check}. "
+                                        f"Position must remain open until minimum profit target is reached."
+                                    )
+                                    logger.warning(f"Agent execute_order: {error_msg} (vorheriger Preis: {current_price}, neuer Preis: {fresh_price_check})")
+                                    return {
+                                        "error": error_msg,
                                         "success": False,
-                                        "current_price": current_price,
+                                        "current_price": fresh_price_check,
                                         "entry_price": self.bot.position_entry_price,
-                                        "current_profit_percent": pnl_percent,
-                                        "minimum_required_profit": TAKE_PROFIT_MIN_PERCENT
+                                        "current_profit_percent": fresh_pnl_percent,
+                                        "minimum_required_profit": TAKE_PROFIT_MIN_PERCENT,
+                                        "note": f"Price was re-checked before validation (old: {current_price}, new: {fresh_price_check})"
                                     }
                                 
                                 # CRITICAL: Check minimum holding period (15 minutes)
@@ -856,20 +871,34 @@ class AgentTools:
                                         }
                                 
                                 # Validate minimum profit requirement for SHORT
-                                elif pnl_percent < TAKE_PROFIT_MIN_PERCENT:
-                                    error_msg = (
-                                        f"⚠️ BUY to close SHORT order BLOCKED: Current profit {pnl_percent:.2f}% is below minimum required "
-                                        f"{TAKE_PROFIT_MIN_PERCENT}%. Entry: {self.bot.position_entry_price}, Current: {current_price}. "
-                                        f"Position must remain open until minimum profit target is reached."
-                                    )
+                                # KRITISCH: Re-Check Preis direkt vor Validierung um sicherzustellen dass Preis aktuell ist
+                                fresh_price_check = self.binance_client.get_current_price(symbol)
+                                if fresh_price_check is None or fresh_price_check <= 0:
+                                    error_msg = f"⚠️ BUY to close SHORT order BLOCKED: Cannot get valid current price for validation ({fresh_price_check})."
                                     logger.warning(f"Agent execute_order: {error_msg}")
                                     return {
                                         "error": error_msg,
+                                        "success": False
+                                    }
+                                
+                                # Re-calculate P&L mit dem aktuellsten Preis (für SHORT: profit wenn entry_price > current_price)
+                                fresh_pnl_percent = ((self.bot.position_entry_price - fresh_price_check) / self.bot.position_entry_price) * 100
+                                
+                                if fresh_pnl_percent < TAKE_PROFIT_MIN_PERCENT:
+                                    error_msg = (
+                                        f"⚠️ BUY to close SHORT order BLOCKED: Current profit {fresh_pnl_percent:.2f}% is below minimum required "
+                                        f"{TAKE_PROFIT_MIN_PERCENT}%. Entry: {self.bot.position_entry_price}, Current: {fresh_price_check}. "
+                                        f"Position must remain open until minimum profit target is reached."
+                                    )
+                                    logger.warning(f"Agent execute_order: {error_msg} (vorheriger Preis: {current_price}, neuer Preis: {fresh_price_check})")
+                                    return {
+                                        "error": error_msg,
                                         "success": False,
-                                        "current_price": current_price,
+                                        "current_price": fresh_price_check,
                                         "entry_price": self.bot.position_entry_price,
-                                        "current_profit_percent": pnl_percent,
-                                        "minimum_required_profit": TAKE_PROFIT_MIN_PERCENT
+                                        "current_profit_percent": fresh_pnl_percent,
+                                        "minimum_required_profit": TAKE_PROFIT_MIN_PERCENT,
+                                        "note": f"Price was re-checked before validation (old: {current_price}, new: {fresh_price_check})"
                                     }
                                 
                                 logger.info(

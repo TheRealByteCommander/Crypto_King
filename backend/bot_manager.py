@@ -1763,6 +1763,38 @@ class TradingBot:
                         logger.warning(f"Bot {self.bot_id}: Quantity {quantity} exceeds balance {balance} {base_asset}. Using balance.")
                         quantity = self.binance_client.adjust_quantity_to_lot_size(symbol, balance)
                     
+                    # KRITISCH: Re-Check Preis direkt vor Ausführung um sicherzustellen dass 2% Ziel noch erreicht ist
+                    # Der Preis könnte sich zwischen Validierung und Ausführung geändert haben
+                    final_price_check = self.binance_client.get_current_price(symbol)
+                    if final_price_check is None or final_price_check <= 0:
+                        error_msg = f"⚠️ SELL order BLOCKED: Cannot get valid current price for final check before execution ({final_price_check})."
+                        logger.warning(f"Bot {self.bot_id}: {error_msg}")
+                        await self.agent_manager.log_agent_message("CypherTrade", error_msg, "error")
+                        return
+                    
+                    # Re-validate 2% Ziel mit dem aktuellsten Preis
+                    final_pnl_percent = ((final_price_check - self.position_entry_price) / self.position_entry_price) * 100
+                    if final_pnl_percent < TAKE_PROFIT_MIN_PERCENT:
+                        logger.warning(
+                            f"Bot {self.bot_id}: ⚠️ SELL order BLOCKED - Final price check: Profit {final_pnl_percent:.2f}% < Minimum {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Entry: {self.position_entry_price}, Final Price: {final_price_check} (vorher: {current_price}). "
+                            f"Preis hat sich geändert - Position bleibt offen."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ SELL order BLOCKED: Final price check shows profit {final_pnl_percent:.2f}% < Minimum {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Price changed from {current_price} to {final_price_check}. Position remains open.",
+                            "warning"
+                        )
+                        return
+                    
+                    # Update current_price mit dem finalen Preis für weitere Berechnungen
+                    current_price = final_price_check
+                    logger.info(
+                        f"Bot {self.bot_id}: Final price check passed - Profit {final_pnl_percent:.2f}% >= Minimum {TAKE_PROFIT_MIN_PERCENT}%. "
+                        f"Proceeding with SELL order."
+                    )
+                    
                     # Execute order
                     execution_start_time = datetime.now(timezone.utc)
                     order = self.binance_client.execute_order(symbol, "SELL", quantity, "MARKET", trading_mode)
@@ -1944,6 +1976,38 @@ class TradingBot:
                         logger.warning(f"Bot {self.bot_id}: Order value too small for {symbol}, skipping trade")
                         return
                     quantity = adjusted_quantity
+                    
+                    # KRITISCH: Re-Check Preis direkt vor Ausführung um sicherzustellen dass 2% Ziel noch erreicht ist
+                    # Der Preis könnte sich zwischen Validierung und Ausführung geändert haben
+                    final_price_check = self.binance_client.get_current_price(symbol)
+                    if final_price_check is None or final_price_check <= 0:
+                        error_msg = f"⚠️ BUY to close SHORT order BLOCKED: Cannot get valid current price for final check before execution ({final_price_check})."
+                        logger.warning(f"Bot {self.bot_id}: {error_msg}")
+                        await self.agent_manager.log_agent_message("CypherTrade", error_msg, "error")
+                        return
+                    
+                    # Re-validate 2% Ziel mit dem aktuellsten Preis (für SHORT: profit wenn entry_price > current_price)
+                    final_pnl_percent = ((self.position_entry_price - final_price_check) / self.position_entry_price) * 100
+                    if final_pnl_percent < TAKE_PROFIT_MIN_PERCENT:
+                        logger.warning(
+                            f"Bot {self.bot_id}: ⚠️ BUY to close SHORT order BLOCKED - Final price check: Profit {final_pnl_percent:.2f}% < Minimum {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Entry: {self.position_entry_price}, Final Price: {final_price_check} (vorher: {current_price}). "
+                            f"Preis hat sich geändert - Position bleibt offen."
+                        )
+                        await self.agent_manager.log_agent_message(
+                            "CypherTrade",
+                            f"⚠️ BUY to close SHORT order BLOCKED: Final price check shows profit {final_pnl_percent:.2f}% < Minimum {TAKE_PROFIT_MIN_PERCENT}%. "
+                            f"Price changed from {current_price} to {final_price_check}. Position remains open.",
+                            "warning"
+                        )
+                        return
+                    
+                    # Update current_price mit dem finalen Preis für weitere Berechnungen
+                    current_price = final_price_check
+                    logger.info(
+                        f"Bot {self.bot_id}: Final price check passed for SHORT - Profit {final_pnl_percent:.2f}% >= Minimum {TAKE_PROFIT_MIN_PERCENT}%. "
+                        f"Proceeding with BUY to close SHORT order."
+                    )
                     
                     # Execute BUY order to close SHORT
                     execution_start_time = datetime.now(timezone.utc)
